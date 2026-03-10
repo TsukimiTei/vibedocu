@@ -29,4 +29,5 @@ export interface AgentSession {
   timestamp: number
   questions: Question[]
   completeness: CompletenessScore
+  pageIndex: number
 }

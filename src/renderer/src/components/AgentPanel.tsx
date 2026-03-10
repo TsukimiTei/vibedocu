@@ -1,8 +1,10 @@
 import { useAgentStore } from '@/stores/agent-store'
+import { useDocumentStore } from '@/stores/document-store'
 import { CompletenessBar } from './CompletenessBar'
 import { QuestionCard } from './QuestionCard'
 import { Button } from './ui/Button'
 import { useAgent } from '@/hooks/useAgent'
+import { parsePages } from '@/lib/page-utils'
 
 interface AgentPanelProps {
   onInsert: (text: string) => void
@@ -12,13 +14,24 @@ interface AgentPanelProps {
 export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
   const { currentQuestions, sessions, isLoading, error } = useAgentStore()
   const { runAnalysis } = useAgent()
+  const currentPageIndex = useDocumentStore((s) => s.currentPageIndex)
+  const content = useDocumentStore((s) => s.content)
+
+  const pages = parsePages(content)
+  const currentPageName = pages[currentPageIndex]?.name || 'Base PRD'
+  const pageSessions = sessions.filter((s) => s.pageIndex === currentPageIndex)
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <span className="text-sm font-semibold text-text-primary uppercase tracking-wider">
-          Agent
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-text-primary uppercase tracking-wider">
+            Agent
+          </span>
+          <span className="text-xs text-text-muted px-1.5 py-0.5 rounded bg-bg-secondary">
+            {currentPageName}
+          </span>
+        </div>
         <div className="flex gap-1.5">
           <Button size="sm" variant="ghost" onClick={onOpenSettings}>
             Settings
@@ -62,7 +75,7 @@ export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
                 { step: '3', text: '回答 Agent 的问题，不断完善你的需求文档' },
                 { step: '4', text: '重复直到完成度超过 80%' },
                 { step: '5', text: '点击 Copy Message，将完整 prompt 复制给 Coding Agent' },
-                { step: '6', text: 'Coding agent 根据你的需求文档开始编码' }
+                { step: '6', text: 'Coding Agent 根据你的需求文档开始编码' }
               ].map((item) => (
                 <div key={item.step} className="flex gap-3">
                   <span className="shrink-0 w-6 h-6 rounded-full bg-accent-blue/15 text-accent-blue flex items-center justify-center text-xs font-bold">
@@ -86,12 +99,12 @@ export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
           />
         ))}
 
-        {sessions.length > 1 && (
+        {pageSessions.length > 1 && (
           <div className="pt-4 border-t border-border">
             <p className="text-xs text-text-muted uppercase tracking-wider mb-2">
-              历史会话 ({sessions.length - 1})
+              历史会话 ({pageSessions.length - 1})
             </p>
-            {sessions.slice(0, -1).reverse().map((session) => (
+            {pageSessions.slice(0, -1).reverse().map((session) => (
               <div key={session.id} className="mb-2 px-3 py-2 rounded bg-bg-secondary">
                 <div className="flex justify-between text-xs text-text-muted">
                   <span>{new Date(session.timestamp).toLocaleTimeString()}</span>

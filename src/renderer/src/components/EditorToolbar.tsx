@@ -5,6 +5,7 @@ import { useAgentStore } from '@/stores/agent-store'
 import { copyToClipboard } from '@/services/file-bridge'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { getFileName } from '@/lib/utils'
+import { getPageContent, parsePages } from '@/lib/page-utils'
 
 interface EditorToolbarProps {
   onUpdate: () => void
@@ -26,7 +27,7 @@ function countWords(text: string): number {
 }
 
 export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
-  const { filePath, content, isDirty, createdAt, lastEdited, lastSaved } = useDocumentStore()
+  const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, currentPageIndex } = useDocumentStore()
   const isLoading = useAgentStore((s) => s.isLoading)
   const sessions = useAgentStore((s) => s.sessions)
 
@@ -36,7 +37,10 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
   const messagePanelRef = useRef<HTMLDivElement>(null)
   const detailsPanelRef = useRef<HTMLDivElement>(null)
 
-  const message = filePath && content ? buildCopyMessage(filePath, content) : ''
+  const pages = parsePages(content)
+  const pageContent = getPageContent(content, currentPageIndex)
+  const basePrdContent = currentPageIndex > 0 ? getPageContent(content, 0) : null
+  const message = filePath && content ? buildCopyMessage(filePath, pageContent, basePrdContent) : ''
 
   const handleCopyPath = async () => {
     if (filePath) await copyToClipboard(filePath)
@@ -48,7 +52,6 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  // Close panels on outside click / Esc
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (showMessagePanel && messagePanelRef.current && !messagePanelRef.current.contains(e.target as Node)) {
@@ -74,11 +77,12 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
 
   const detailRows = [
     { label: '文件路径', value: filePath || '—' },
+    { label: '当前页面', value: pages[currentPageIndex]?.name || 'Base PRD' },
+    { label: '页面数', value: `${pages.length}` },
     { label: '创建时间', value: formatTime(createdAt) },
     { label: '最后编辑', value: formatTime(lastEdited) },
     { label: '最后保存', value: formatTime(lastSaved) },
-    { label: '字数', value: content ? countWords(content).toLocaleString() : '0' },
-    { label: '字符数', value: content ? content.length.toLocaleString() : '0' },
+    { label: '字数 (当前页)', value: pageContent ? countWords(pageContent).toLocaleString() : '0' },
     { label: '问答轮次', value: `${sessions.length}` },
   ]
 

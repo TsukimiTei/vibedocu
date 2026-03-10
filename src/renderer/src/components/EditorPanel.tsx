@@ -1,7 +1,10 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { MarkdownEditor } from './MarkdownEditor'
 import { EditorToolbar } from './EditorToolbar'
+import { PageTabBar } from './PageTabBar'
 import { useDocumentStore } from '@/stores/document-store'
+import { useAgentStore } from '@/stores/agent-store'
+import { getPageContent, updatePageContent } from '@/lib/page-utils'
 import type { EditorHandle } from '@/hooks/useEditor'
 
 interface EditorPanelProps {
@@ -11,12 +14,17 @@ interface EditorPanelProps {
 }
 
 export function EditorPanel({ editorRef, onUpdate, onSave }: EditorPanelProps) {
-  const { content, setContent, markDirty } = useDocumentStore()
+  const { content, currentPageIndex, setContent, markDirty } = useDocumentStore()
   const internalRef = useRef<EditorHandle>(null)
+  const prevPageIndexRef = useRef(currentPageIndex)
+
+  const initialPageContent = getPageContent(content, currentPageIndex)
 
   const handleChange = useCallback(
-    (md: string) => {
-      setContent(md)
+    (pageMd: string) => {
+      const store = useDocumentStore.getState()
+      const newFull = updatePageContent(store.content, store.currentPageIndex, pageMd)
+      setContent(newFull)
       markDirty()
     },
     [setContent, markDirty]
@@ -29,6 +37,19 @@ export function EditorPanel({ editorRef, onUpdate, onSave }: EditorPanelProps) {
     },
     [editorRef]
   )
+
+  // Switch page → update editor content and agent panel
+  useEffect(() => {
+    if (prevPageIndexRef.current !== currentPageIndex) {
+      prevPageIndexRef.current = currentPageIndex
+      const pageContent = getPageContent(
+        useDocumentStore.getState().content,
+        currentPageIndex
+      )
+      internalRef.current?.setMarkdown(pageContent)
+      useAgentStore.getState().switchToPage(currentPageIndex)
+    }
+  }, [currentPageIndex])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -48,10 +69,11 @@ export function EditorPanel({ editorRef, onUpdate, onSave }: EditorPanelProps) {
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       <EditorToolbar onUpdate={onUpdate} onSave={onSave} />
+      <PageTabBar />
       <div className="flex-1 overflow-hidden">
         <MarkdownEditor
           ref={setRef}
-          initialContent={content}
+          initialContent={initialPageContent}
           onChange={handleChange}
         />
       </div>

@@ -3,9 +3,9 @@ import { useAgentStore } from '@/stores/agent-store'
 import { useDocumentStore } from '@/stores/document-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { analyzeDocument } from '@/services/openrouter-service'
+import { getPageContent } from '@/lib/page-utils'
 
 export function useAgent() {
-  const { content } = useDocumentStore()
   const { apiKey, model } = useSettingsStore()
   const { setLoading, setError, addSession, isLoading } = useAgentStore()
 
@@ -14,20 +14,25 @@ export function useAgent() {
       setError('Please set your OpenRouter API key in settings')
       return
     }
-    if (!content.trim()) {
-      setError('Document is empty')
+
+    const { content, currentPageIndex } = useDocumentStore.getState()
+    const pageContent = getPageContent(content, currentPageIndex)
+    const basePrdContext = currentPageIndex > 0 ? getPageContent(content, 0) : null
+
+    if (!pageContent.trim()) {
+      setError('当前页面内容为空')
       return
     }
 
     setLoading(true)
     try {
-      const response = await analyzeDocument(content, model, apiKey)
-      addSession(response.questions, response.completeness)
+      const response = await analyzeDocument(pageContent, model, apiKey, basePrdContext)
+      addSession(response.questions, response.completeness, currentPageIndex)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to analyze document'
       setError(message)
     }
-  }, [apiKey, model, content, setLoading, setError, addSession])
+  }, [apiKey, model, setLoading, setError, addSession])
 
   return { runAnalysis, isLoading }
 }

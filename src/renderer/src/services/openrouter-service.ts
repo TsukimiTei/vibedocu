@@ -49,10 +49,11 @@ function extractAndParseJSON(text: string): AgentResponse {
 export async function analyzeDocument(
   markdown: string,
   model: string,
-  apiKey: string
+  apiKey: string,
+  basePrdContext?: string | null
 ): Promise<AgentResponse> {
   const openrouter = createOpenRouter({ apiKey })
-  const { system, user } = buildAnalysisPrompt(markdown)
+  const { system, user } = buildAnalysisPrompt(markdown, basePrdContext)
 
   // Try structured output first
   try {
