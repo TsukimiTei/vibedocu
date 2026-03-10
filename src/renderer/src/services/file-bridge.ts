@@ -24,6 +24,12 @@ export async function saveImage(
   return api.file.saveImage(docPath, imageBuffer, filename)
 }
 
+export async function readImageFile(
+  imagePath: string
+): Promise<{ base64: string; mimeType: string } | null> {
+  return api.file.readImage(imagePath)
+}
+
 export async function copyToClipboard(text: string): Promise<void> {
   await api.clipboard.writeText(text)
 }
@@ -38,4 +44,29 @@ export async function syncToVault(
   overwrite: boolean = false
 ): Promise<{ success: boolean; error?: string; conflict?: boolean }> {
   return api.sync.toVault(filePath, vaultPath, overwrite)
+}
+
+export async function scanProjectFiles(
+  projectDir: string,
+  excludeFile?: string
+): Promise<{ relativePath: string; absolutePath: string; size: number }[]> {
+  if (!api.context) return []
+  return api.context.scan(projectDir, excludeFile)
+}
+
+export async function readContextFiles(
+  absolutePaths: string[]
+): Promise<{ path: string; content: string }[]> {
+  if (!api.context) return []
+  return api.context.readFiles(absolutePaths)
+}
+
+export async function readContextData(docPath: string): Promise<string | null> {
+  if (!api.context) return null
+  return api.context.readData(docPath)
+}
+
+export async function writeContextData(docPath: string, data: string): Promise<void> {
+  if (!api.context) return
+  return api.context.writeData(docPath, data)
 }

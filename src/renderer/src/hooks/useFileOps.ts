@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useDocumentStore } from '@/stores/document-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAgentStore } from '@/stores/agent-store'
+import { useContextStore } from '@/stores/context-store'
 import * as fileBridge from '@/services/file-bridge'
 import { NEW_DOC_TEMPLATE } from '@/lib/constants'
 
@@ -19,6 +20,7 @@ export function useFileOps() {
     addRecentFile(path)
     ;(window as any).__vibedocu_docPath = path
     useAgentStore.getState().loadFromFile(path)
+    useContextStore.getState().loadFromFile(path)
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
 
@@ -32,6 +34,7 @@ export function useFileOps() {
         addRecentFile(path)
         ;(window as any).__vibedocu_docPath = path
         useAgentStore.getState().loadFromFile(path)
+        useContextStore.getState().loadFromFile(path)
       } catch {
         // File no longer exists, remove from recent list
         useSettingsStore.getState().removeRecentFile(path)
@@ -50,6 +53,7 @@ export function useFileOps() {
     markSaved()
     addRecentFile(path)
     useAgentStore.getState().reset()
+    useContextStore.getState().reset()
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
 
@@ -62,6 +66,7 @@ export function useFileOps() {
   const closeDocument = useCallback(() => {
     reset()
     useAgentStore.getState().reset()
+    useContextStore.getState().reset()
   }, [reset])
 
   return { openExisting, openRecent, createNew, save, closeDocument }

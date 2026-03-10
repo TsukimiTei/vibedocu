@@ -34,6 +34,8 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolba
   const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, activePageIndex } = useDocumentStore()
   const isLoading = useAgentStore((s) => s.isLoading)
   const sessions = useAgentStore((s) => s.sessions)
+  const pageOrderReversed = useSettingsStore((s) => s.pageOrderReversed)
+  const togglePageOrder = useSettingsStore((s) => s.togglePageOrder)
 
   const [showMessagePanel, setShowMessagePanel] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -163,6 +165,12 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolba
         >
           Details
         </Button>
+        <button
+          onClick={togglePageOrder}
+          className="inline-flex items-center justify-center w-7 h-7 rounded text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer text-[13px] font-mono"
+        >
+          {pageOrderReversed ? '↓' : '↑'}
+        </button>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <Button size="sm" variant="ghost" onClick={handleSync} disabled={!filePath || isSyncing}>

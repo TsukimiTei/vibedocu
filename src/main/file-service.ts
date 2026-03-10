@@ -1,6 +1,6 @@
 import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
-import { dirname, join, parse } from 'path'
+import { dirname, join, parse, extname } from 'path'
 
 export async function readFile(filePath: string): Promise<string> {
   return fsReadFile(filePath, 'utf-8')
@@ -33,6 +33,30 @@ export async function saveImage(
   return `./${docName}/assets/${filename}`
 }
 
+const MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp'
+}
+
+export async function readImageAsBase64(
+  imagePath: string
+): Promise<{ base64: string; mimeType: string } | null> {
+  if (!existsSync(imagePath)) return null
+  try {
+    const buffer = await fsReadFile(imagePath)
+    const ext = extname(imagePath).toLowerCase()
+    const mimeType = MIME_TYPES[ext] || 'image/png'
+    return { base64: buffer.toString('base64'), mimeType }
+  } catch {
+    return null
+  }
+}
+
 /** Get the path for agent session data file associated with a document */
 function getAgentDataPath(docPath: string): string {
   const docName = parse(docPath).name
@@ -52,6 +76,32 @@ export async function readAgentData(docPath: string): Promise<string | null> {
 
 export async function writeAgentData(docPath: string, data: string): Promise<void> {
   const dataPath = getAgentDataPath(docPath)
+  const dir = dirname(dataPath)
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true })
+  }
+  await fsWriteFile(dataPath, data, 'utf-8')
+}
+
+/** Get the path for context data file associated with a document */
+function getContextDataPath(docPath: string): string {
+  const docName = parse(docPath).name
+  const docDir = dirname(docPath)
+  return join(docDir, docName, 'context-data.json')
+}
+
+export async function readContextData(docPath: string): Promise<string | null> {
+  const dataPath = getContextDataPath(docPath)
+  if (!existsSync(dataPath)) return null
+  try {
+    return await fsReadFile(dataPath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+export async function writeContextData(docPath: string, data: string): Promise<void> {
+  const dataPath = getContextDataPath(docPath)
   const dir = dirname(dataPath)
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true })

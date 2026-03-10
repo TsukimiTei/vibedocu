@@ -45,6 +45,7 @@
     "productName": "VibeDocs",
     "mac": {
       "target": "dmg",
+      "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools"
     },
     "files": [

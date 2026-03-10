@@ -1,7 +1,17 @@
 import { ipcMain, app } from 'electron'
-import { readFile, writeFile, saveImage, readAgentData, writeAgentData } from './file-service'
+import {
+  readFile,
+  writeFile,
+  saveImage,
+  readImageAsBase64,
+  readAgentData,
+  writeAgentData,
+  readContextData,
+  writeContextData
+} from './file-service'
 import { openFileDialog, chooseDirectoryDialog } from './dialog-service'
 import { checkSyncConflict, syncToVault } from './sync-service'
+import { scanAllFiles, readFiles } from './context-service'
 import { clipboard } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -47,6 +57,13 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    'file:readImage',
+    async (_event, imagePath: string) => {
+      return readImageAsBase64(imagePath)
+    }
+  )
+
   ipcMain.handle('clipboard:writeText', async (_event, text: string) => {
     clipboard.writeText(text)
     return true
@@ -70,4 +87,27 @@ export function registerIpcHandlers(): void {
       return syncToVault(filePath, vaultPath, overwrite)
     }
   )
+
+  ipcMain.handle(
+    'context:scan',
+    async (_event, projectDir: string, excludeFile?: string) => {
+      const files = await scanAllFiles(projectDir, excludeFile)
+      return files.map((f) => ({ relativePath: f.relativePath, absolutePath: f.absolutePath, size: f.size }))
+    }
+  )
+
+  ipcMain.handle(
+    'context:readFiles',
+    async (_event, absolutePaths: string[]) => {
+      return readFiles(absolutePaths)
+    }
+  )
+
+  ipcMain.handle('context:readData', async (_event, docPath: string) => {
+    return readContextData(docPath)
+  })
+
+  ipcMain.handle('context:writeData', async (_event, docPath: string, data: string) => {
+    return writeContextData(docPath, data)
+  })
 }

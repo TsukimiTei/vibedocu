@@ -3,6 +3,7 @@ import { MarkdownEditor } from './MarkdownEditor'
 import { EditorToolbar } from './EditorToolbar'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
@@ -17,11 +18,19 @@ interface EditorPanelProps {
 
 export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings }: EditorPanelProps) {
   const { content, activePageIndex, setContent, markDirty, setActivePageIndex } = useDocumentStore()
+  const pageOrderReversed = useSettingsStore((s) => s.pageOrderReversed)
   const editorRefs = useRef<Map<number, EditorHandle>>(new Map())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef<number | null>(null)
 
   const pages = parsePages(content)
+
+  // Build display order: array of original page indices
+  const displayOrder = useMemo(() => {
+    const indices = pages.map((_, i) => i)
+    if (pageOrderReversed) indices.reverse()
+    return indices
+  }, [pages.length, pageOrderReversed])
 
   // Debounced auto-save: saves to disk 1s after last edit
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -65,9 +74,15 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings 
     setContent(newContent)
     setActivePageIndex(newIndex)
     pendingFocusRef.current = newIndex
-    // Scroll to bottom after React renders the new section
+    // Scroll to the new page after React renders it
     requestAnimationFrame(() => {
-      scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: 'smooth' })
+      if (pageOrderReversed) {
+        // Reversed: new page appears at top
+        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        // Normal: new page appears at bottom
+        scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current!.scrollHeight, behavior: 'smooth' })
+      }
     })
     // Auto-save to disk so pages persist across restarts
     const { filePath } = useDocumentStore.getState()
@@ -76,7 +91,7 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings 
         useDocumentStore.getState().markSaved()
       })
     }
-  }, [setContent, setActivePageIndex])
+  }, [setContent, setActivePageIndex, pageOrderReversed])
 
   const setEditorRef = useCallback(
     (pageIndex: number, handle: EditorHandle | null) => {
@@ -92,8 +107,7 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings 
             // Focus the editor's contenteditable element
             const container = scrollContainerRef.current
             if (container) {
-              const sections = container.querySelectorAll('[data-page-index]')
-              const section = sections[pageIndex]
+              const section = container.querySelector(`[data-page-index="${pageIndex}"]`)
               const editable = section?.querySelector('[contenteditable]') as HTMLElement
               if (editable) {
                 editable.focus()
@@ -137,65 +151,82 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings 
     <div className="flex flex-col h-full bg-bg-primary">
       <EditorToolbar onUpdate={onUpdate} onSave={onSave} onOpenSettings={onOpenSettings} />
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-        {pages.map((page, i) => (
-          <div key={i} data-page-index={i} onFocus={() => handleFocus(i)}>
-            {/* Section Header */}
-            <div className={`flex items-center gap-3 px-6 py-3 border-b border-border sticky top-0 z-10 ${
-              i === activePageIndex ? 'bg-accent-blue/5' : 'bg-bg-secondary'
-            }`}>
-              <span className="text-[13px] font-semibold text-accent-blue font-mono shrink-0">
-                {getPageVersion(i)}
-              </span>
-              <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
-              <span className="text-[13px] font-medium text-text-primary font-mono shrink-0">
-                {page.name}
-              </span>
-              {i > 0 && getPageTitle(content, i) && (
-                <>
-                  <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
-                  <span className="text-[13px] text-text-secondary font-mono truncate">
-                    {getPageTitle(content, i)}
-                  </span>
-                </>
-              )}
-              <div className="flex-1 h-px bg-border" />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const store = useDocumentStore.getState()
-                  const msg = buildCopyMessage(store.filePath || '', page.name, i)
-                  copyToClipboard(msg)
-                }}
-                className="text-[11px] text-text-muted hover:text-accent-green font-mono cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-accent-green/10"
-              >
-                Copy Msg
-              </button>
-              {i === activePageIndex && (
-                <span className="text-[10px] text-accent-blue/60 font-mono">EDITING</span>
-              )}
-            </div>
-
-            {/* Editor */}
-            <div className="min-h-[120px]">
-              <PageEditor
-                pageIndex={i}
-                initialBody={getPageBody(content, i)}
-                onChange={handlePageChange}
-                onRef={setEditorRef}
-              />
-            </div>
+        {/* New Page Button (top when reversed) */}
+        {pageOrderReversed && (
+          <div className="flex items-center justify-center py-6 border-b border-border/50">
+            <button
+              onClick={handleNewPage}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-border hover:border-accent-blue/50 hover:bg-accent-blue/5 text-text-muted hover:text-accent-blue transition-colors cursor-pointer font-mono text-[13px]"
+            >
+              + New Page {getPageVersion(pages.length)}
+            </button>
           </div>
-        ))}
+        )}
 
-        {/* New Page Button */}
-        <div className="flex items-center justify-center py-6 border-t border-border/50">
-          <button
-            onClick={handleNewPage}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-border hover:border-accent-blue/50 hover:bg-accent-blue/5 text-text-muted hover:text-accent-blue transition-colors cursor-pointer font-mono text-[13px]"
-          >
-            + New Page {getPageVersion(pages.length)}
-          </button>
-        </div>
+        {displayOrder.map((i) => {
+          const page = pages[i]
+          return (
+            <div key={i} data-page-index={i} onFocus={() => handleFocus(i)}>
+              {/* Section Header */}
+              <div className={`flex items-center gap-3 px-6 py-3 border-b border-border sticky top-0 z-10 ${
+                i === activePageIndex ? 'bg-accent-blue/5' : 'bg-bg-secondary'
+              }`}>
+                <span className="text-[13px] font-semibold text-accent-blue font-mono shrink-0">
+                  {getPageVersion(i)}
+                </span>
+                <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
+                <span className="text-[13px] font-medium text-text-primary font-mono shrink-0">
+                  {page.name}
+                </span>
+                {i > 0 && (
+                  <>
+                    <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
+                    <span className={`text-[13px] font-mono truncate ${getPageTitle(content, i) ? 'text-text-secondary' : 'text-text-muted/40 italic'}`}>
+                      {getPageTitle(content, i) || 'Enter version name'}
+                    </span>
+                  </>
+                )}
+                <div className="flex-1 h-px bg-border" />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const store = useDocumentStore.getState()
+                    const msg = buildCopyMessage(store.filePath || '', page.name, i)
+                    copyToClipboard(msg)
+                  }}
+                  className="text-[11px] text-text-muted hover:text-accent-green font-mono cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-accent-green/10"
+                >
+                  Copy Msg
+                </button>
+                {i === activePageIndex && (
+                  <span className="text-[10px] text-accent-blue/60 font-mono">EDITING</span>
+                )}
+              </div>
+
+              {/* Editor */}
+              <div className="min-h-[120px]">
+                <PageEditor
+                  pageIndex={i}
+                  initialBody={getPageBody(content, i)}
+                  onChange={handlePageChange}
+                  onRef={setEditorRef}
+                />
+              </div>
+            </div>
+          )
+        })}
+
+        {/* New Page Button (bottom when normal order) */}
+        {!pageOrderReversed && (
+          <div className="flex items-center justify-center py-6 border-t border-border/50">
+            <button
+              onClick={handleNewPage}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-border hover:border-accent-blue/50 hover:bg-accent-blue/5 text-text-muted hover:text-accent-blue transition-colors cursor-pointer font-mono text-[13px]"
+            >
+              + New Page {getPageVersion(pages.length)}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

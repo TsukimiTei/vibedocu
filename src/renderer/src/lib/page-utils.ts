@@ -105,6 +105,32 @@ export function getPageTitle(fullContent: string, pageIndex: number): string {
   return match ? match[1].trim() : ''
 }
 
+export interface ExtractedImage {
+  index: number
+  src: string
+  isDataUri: boolean
+}
+
+/**
+ * Extract all image references from markdown content, in document order.
+ * Returns both file-path images and inline data URI images.
+ */
+export function extractImages(markdown: string): ExtractedImage[] {
+  const images: ExtractedImage[] = []
+  const regex = /!\[[^\]]*\]\(([^)]+)\)/g
+  let match: RegExpExecArray | null
+  let idx = 1
+  while ((match = regex.exec(markdown)) !== null) {
+    const src = match[1]
+    images.push({
+      index: idx++,
+      src,
+      isDataUri: src.startsWith('data:')
+    })
+  }
+  return images
+}
+
 export function renamePage(fullContent: string, pageIndex: number, newName: string): string {
   const pages = parsePages(fullContent)
   if (pageIndex <= 0 || !pages[pageIndex]) return fullContent

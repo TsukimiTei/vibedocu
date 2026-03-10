@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useAgentStore } from '@/stores/agent-store'
 import { useDocumentStore } from '@/stores/document-store'
+import { useContextStore } from '@/stores/context-store'
 import { CompletenessBar } from './CompletenessBar'
 import { QuestionCard } from './QuestionCard'
 import { Button } from './ui/Button'
@@ -9,6 +11,64 @@ import { parsePages } from '@/lib/page-utils'
 interface AgentPanelProps {
   onInsert: (text: string) => void
   onOpenSettings: () => void
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  return `${(bytes / 1024).toFixed(1)}KB`
+}
+
+function ContextSection() {
+  const { files, hasContext, isScanning } = useContextStore()
+  const { refreshContext } = useAgent()
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="px-4 py-2.5 border-b border-border">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => hasContext && setExpanded(!expanded)}
+          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+        >
+          <span
+            className={`transition-transform duration-150 text-[10px] ${expanded ? 'rotate-90' : ''}`}
+          >
+            ▶
+          </span>
+          <span className="uppercase tracking-wider font-medium">Context</span>
+          {isScanning ? (
+            <span className="inline-block w-3 h-3 border border-accent-blue/30 border-t-accent-blue rounded-full animate-spin ml-1" />
+          ) : hasContext ? (
+            <span className="text-text-muted ml-1">{files.length} files</span>
+          ) : (
+            <span className="text-text-muted/50 ml-1">not scanned</span>
+          )}
+        </button>
+        <button
+          onClick={refreshContext}
+          disabled={isScanning}
+          className="text-[11px] text-text-muted hover:text-text-secondary transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed px-1.5 py-0.5 rounded hover:bg-bg-secondary"
+          title="重新扫描项目目录"
+        >
+          ↻
+        </button>
+      </div>
+
+      {expanded && hasContext && (
+        <div className="mt-2 max-h-[160px] overflow-y-auto space-y-0.5">
+          {files.map((f) => (
+            <div
+              key={f.relativePath}
+              className="flex items-center justify-between text-[11px] font-mono px-2 py-1 rounded hover:bg-bg-secondary"
+            >
+              <span className="text-text-secondary truncate mr-2">{f.relativePath}</span>
+              <span className="text-text-muted shrink-0">{formatSize(f.size)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
@@ -38,6 +98,8 @@ export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
           </Button>
         </div>
       </div>
+
+      <ContextSection />
 
       <CompletenessBar onRetry={runAnalysis} />
 
