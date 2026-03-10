@@ -95,9 +95,11 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
           placeholder="输入你的答案..."
           className="flex-1 px-3 py-2 rounded border border-border bg-bg-tertiary text-sm text-text-primary outline-none focus:border-accent-blue/50 placeholder:text-text-muted"
         />
-        <Button size="md" variant="primary" onClick={handleCustomSubmit} disabled={!customInput.trim()}>
-          确认
-        </Button>
+        {customInput.trim() && (
+          <Button size="md" variant="primary" onClick={handleCustomSubmit}>
+            确认
+          </Button>
+        )}
       </div>
     </Card>
   )
