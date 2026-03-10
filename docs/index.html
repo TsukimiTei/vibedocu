@@ -45,40 +45,43 @@
     .blob {
       position: absolute;
       border-radius: 50%;
-      filter: blur(120px);
-      opacity: 0.12;
+      filter: blur(100px);
       will-change: transform;
     }
     .blob-1 {
-      width: 600px; height: 600px;
-      background: radial-gradient(circle, var(--blue), transparent 70%);
-      top: -10%; left: -5%;
+      width: 700px; height: 700px;
+      background: var(--blue);
+      opacity: 0.35;
+      top: -15%; left: -10%;
       animation: drift1 25s ease-in-out infinite;
     }
     .blob-2 {
-      width: 500px; height: 500px;
-      background: radial-gradient(circle, var(--purple), transparent 70%);
-      top: 30%; right: -10%;
+      width: 600px; height: 600px;
+      background: var(--purple);
+      opacity: 0.3;
+      top: 25%; right: -15%;
       animation: drift2 30s ease-in-out infinite;
     }
     .blob-3 {
-      width: 450px; height: 450px;
-      background: radial-gradient(circle, var(--green), transparent 70%);
-      bottom: 10%; left: 15%;
+      width: 550px; height: 550px;
+      background: var(--green);
+      opacity: 0.2;
+      bottom: 5%; left: 10%;
       animation: drift3 22s ease-in-out infinite;
     }
     .blob-4 {
-      width: 350px; height: 350px;
-      background: radial-gradient(circle, var(--orange), transparent 70%);
-      top: 60%; left: 50%;
+      width: 400px; height: 400px;
+      background: var(--orange);
+      opacity: 0.18;
+      top: 55%; left: 45%;
       animation: drift4 28s ease-in-out infinite;
     }
     .blob-5 {
-      width: 550px; height: 550px;
-      background: radial-gradient(circle, var(--blue), var(--purple) 50%, transparent 70%);
-      top: -5%; right: 20%;
+      width: 650px; height: 650px;
+      background: var(--purple);
+      opacity: 0.2;
+      top: -8%; right: 15%;
       animation: drift5 35s ease-in-out infinite;
-      opacity: 0.08;
     }
 
     @keyframes drift1 {
