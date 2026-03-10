@@ -366,6 +366,113 @@
       line-height: 1.6;
     }
 
+    /* Install */
+    .install {
+      padding: 80px 0 100px;
+      border-top: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
+    }
+    .install h2 {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+    .install .subtitle {
+      text-align: center;
+      color: var(--text2);
+      font-size: 14px;
+      margin-bottom: 40px;
+    }
+    .install-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .install-step {
+      display: flex;
+      gap: 16px;
+    }
+    .install-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(74, 222, 128, 0.15);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .install-text h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .install-text p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+    .install-code {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0;
+      padding: 10px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    .install-code code {
+      flex: 1;
+      font-size: 12px;
+      color: var(--green);
+      white-space: nowrap;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-family: inherit;
+      color: var(--text2);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover {
+      border-color: var(--muted);
+      color: var(--text);
+    }
+    .install-note {
+      font-size: 12px !important;
+      color: var(--muted) !important;
+      margin-top: 4px;
+    }
+    .install-why {
+      max-width: 600px;
+      margin: 32px auto 0;
+      padding: 14px 18px;
+      background: rgba(96, 165, 250, 0.08);
+      border: 1px solid rgba(96, 165, 250, 0.15);
+      border-radius: 8px;
+    }
+    .install-why p {
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
     /* CTA */
     .cta {
       padding: 80px 0;
@@ -419,6 +526,7 @@
     <div class="links">
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
+      <a href="#install">Install</a>
       <a href="https://github.com/TsukimiTei/vibedocu">GitHub</a>
     </div>
   </div>
@@ -550,6 +658,44 @@
           <p>粘贴给 Claude Code、Cursor、Copilot…获得高质量代码实现。</p>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <div class="container">
+    <h2>安装指南</h2>
+    <p class="subtitle">首次打开需要解除 macOS 安全限制（仅需一次）</p>
+    <div class="install-steps">
+      <div class="install-step">
+        <div class="install-num">1</div>
+        <div class="install-text">
+          <h4>下载并安装</h4>
+          <p>从 <a href="https://github.com/TsukimiTei/vibedocu/releases">GitHub Releases</a> 下载 .dmg 文件，拖拽 VibeDocs 到 Applications 文件夹。</p>
+        </div>
+      </div>
+      <div class="install-step">
+        <div class="install-num">2</div>
+        <div class="install-text">
+          <h4>解除安全限制</h4>
+          <p>打开终端（Terminal），粘贴以下命令并回车：</p>
+          <div class="install-code">
+            <code id="xattr-cmd">sudo xattr -rd com.apple.quarantine /Applications/VibeDocs.app</code>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('xattr-cmd').textContent)">Copy</button>
+          </div>
+          <p class="install-note">输入你的 Mac 开机密码（输入时不会显示），回车确认。</p>
+        </div>
+      </div>
+      <div class="install-step">
+        <div class="install-num">3</div>
+        <div class="install-text">
+          <h4>打开 VibeDocs</h4>
+          <p>命令执行完毕后即可正常打开应用，后续无需重复此操作。</p>
+        </div>
+      </div>
+    </div>
+    <div class="install-why">
+      <p>为什么需要这一步？VibeDocs 是开源免费应用，暂未购买 Apple 开发者签名（$99/年）。此命令仅移除 macOS 的下载隔离标记，不会影响系统安全。</p>
     </div>
   </div>
 </section>
