@@ -1,7 +1,20 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { DEFAULT_MODEL } from '@/lib/constants'
 import type { ThemeId } from '@/types/settings'
+
+// File-based storage via main process IPC — survives app crashes
+const fileStorage: StateStorage = {
+  getItem: async () => {
+    return (await window.api.settings.read()) ?? null
+  },
+  setItem: async (_name, value) => {
+    await window.api.settings.write(value)
+  },
+  removeItem: async () => {
+    await window.api.settings.write('{}')
+  }
+}
 
 interface SettingsStore {
   apiKey: string
@@ -49,6 +62,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'vibedocu-settings',
+      storage: createJSONStorage(() => fileStorage),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) applyTheme(state.theme)
       }

@@ -14,21 +14,21 @@ interface AgentPanelProps {
 export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
   const { currentQuestions, sessions, isLoading, error } = useAgentStore()
   const { runAnalysis } = useAgent()
-  const currentPageIndex = useDocumentStore((s) => s.currentPageIndex)
+  const activePageIndex = useDocumentStore((s) => s.activePageIndex)
   const content = useDocumentStore((s) => s.content)
 
   const pages = parsePages(content)
-  const currentPageName = pages[currentPageIndex]?.name || 'Base PRD'
-  const pageSessions = sessions.filter((s) => s.pageIndex === currentPageIndex)
+  const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
+  const pageSessions = sessions.filter((s) => s.pageIndex === activePageIndex)
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-text-primary uppercase tracking-wider">
+          <span className="text-[14px] font-semibold text-text-primary uppercase tracking-wider">
             Agent
           </span>
-          <span className="text-xs text-text-muted px-1.5 py-0.5 rounded bg-bg-secondary">
+          <span className="text-[13px] text-text-muted px-2 py-0.5 rounded bg-bg-secondary">
             {currentPageName}
           </span>
         </div>

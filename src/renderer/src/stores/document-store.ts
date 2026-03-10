@@ -7,13 +7,13 @@ interface DocumentStore {
   lastSaved: number | null
   createdAt: number | null
   lastEdited: number | null
-  currentPageIndex: number
+  activePageIndex: number
 
   setFilePath: (path: string | null) => void
   setContent: (content: string) => void
   markDirty: () => void
   markSaved: () => void
-  setCurrentPageIndex: (index: number) => void
+  setActivePageIndex: (index: number) => void
   reset: () => void
 }
 
@@ -24,7 +24,7 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
   lastSaved: null,
   createdAt: null,
   lastEdited: null,
-  currentPageIndex: 0,
+  activePageIndex: 0,
 
   setFilePath: (path) => set((state) => ({
     filePath: path,
@@ -33,10 +33,10 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
   setContent: (content) => set({ content, lastEdited: Date.now() }),
   markDirty: () => set({ isDirty: true }),
   markSaved: () => set({ isDirty: false, lastSaved: Date.now() }),
-  setCurrentPageIndex: (index) => set({ currentPageIndex: index }),
+  setActivePageIndex: (index) => set({ activePageIndex: index }),
   reset: () => set({
     filePath: null, content: '', isDirty: false,
     lastSaved: null, createdAt: null, lastEdited: null,
-    currentPageIndex: 0
+    activePageIndex: 0
   })
 }))

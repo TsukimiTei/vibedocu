@@ -14,6 +14,10 @@ const api = {
   },
   clipboard: {
     writeText: (text: string): Promise<boolean> => ipcRenderer.invoke('clipboard:writeText', text)
+  },
+  settings: {
+    read: (): Promise<string | null> => ipcRenderer.invoke('settings:read'),
+    write: (data: string): Promise<void> => ipcRenderer.invoke('settings:write', data)
   }
 }
 

@@ -21,11 +21,16 @@ export function useFileOps() {
 
   const openRecent = useCallback(
     async (path: string) => {
-      const fileContent = await fileBridge.readFile(path)
-      setFilePath(path)
-      setContent(fileContent)
-      markSaved()
-      addRecentFile(path)
+      try {
+        const fileContent = await fileBridge.readFile(path)
+        setFilePath(path)
+        setContent(fileContent)
+        markSaved()
+        addRecentFile(path)
+      } catch {
+        // File no longer exists, remove from recent list
+        useSettingsStore.getState().removeRecentFile(path)
+      }
     },
     [setFilePath, setContent, markSaved, addRecentFile]
   )

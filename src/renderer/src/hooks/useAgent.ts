@@ -15,9 +15,9 @@ export function useAgent() {
       return
     }
 
-    const { content, currentPageIndex } = useDocumentStore.getState()
-    const pageContent = getPageContent(content, currentPageIndex)
-    const basePrdContext = currentPageIndex > 0 ? getPageContent(content, 0) : null
+    const { content, activePageIndex } = useDocumentStore.getState()
+    const pageContent = getPageContent(content, activePageIndex)
+    const basePrdContext = activePageIndex > 0 ? getPageContent(content, 0) : null
 
     if (!pageContent.trim()) {
       setError('当前页面内容为空')
@@ -27,7 +27,7 @@ export function useAgent() {
     setLoading(true)
     try {
       const response = await analyzeDocument(pageContent, model, apiKey, basePrdContext)
-      addSession(response.questions, response.completeness, currentPageIndex)
+      addSession(response.questions, response.completeness, activePageIndex)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to analyze document'
       setError(message)

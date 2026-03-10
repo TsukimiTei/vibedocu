@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { AgentPanel } from './components/AgentPanel'
 import { EditorPanel } from './components/EditorPanel'
@@ -8,8 +8,8 @@ import { SplitPanel } from './components/ui/SplitPanel'
 import { useDocumentStore } from './stores/document-store'
 import { useSettingsStore } from './stores/settings-store'
 import { useFileOps } from './hooks/useFileOps'
-import { useEditor } from './hooks/useEditor'
 import { useAgent } from './hooks/useAgent'
+import type { EditorHandle } from './hooks/useEditor'
 
 export default function App() {
   const filePath = useDocumentStore((s) => s.filePath)
@@ -20,8 +20,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const { save, openExisting, createNew } = useFileOps()
-  const { editorRef, insertAtCursor } = useEditor()
   const { runAnalysis } = useAgent()
+  const activeEditorRef = useRef<EditorHandle | null>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -56,16 +56,16 @@ export default function App() {
 
   const handleInsert = useCallback(
     (text: string) => {
-      insertAtCursor(text)
+      activeEditorRef.current?.insertAtCursor(text)
     },
-    [insertAtCursor]
+    []
   )
 
   if (!filePath) {
     return (
       <>
         <div className="h-full flex flex-col">
-          <div className="h-8 shrink-0 app-drag-region" />
+          <div className="h-[38px] shrink-0 app-drag-region bg-bg-secondary border-b border-border" />
           <div className="flex-1">
             <WelcomeScreen onCreateNew={handleCreateNew} />
           </div>
@@ -79,7 +79,7 @@ export default function App() {
   return (
     <>
       <div className="h-full flex flex-col">
-        <div className="h-8 shrink-0 app-drag-region" />
+        <div className="h-[38px] shrink-0 app-drag-region bg-bg-secondary border-b border-border" />
         <div className="flex-1 overflow-hidden">
           <SplitPanel
             left={
@@ -90,7 +90,7 @@ export default function App() {
             }
             right={
               <EditorPanel
-                editorRef={editorRef}
+                activeEditorRef={activeEditorRef}
                 onUpdate={runAnalysis}
                 onSave={save}
               />

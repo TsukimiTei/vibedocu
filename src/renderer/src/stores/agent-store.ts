@@ -50,14 +50,32 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   markAnswered: (questionId, answer) =>
-    set((state) => ({
-      currentQuestions: state.currentQuestions.map((q) =>
+    set((state) => {
+      const updatedQuestions = state.currentQuestions.map((q) =>
         q.id === questionId ? { ...q, answered: true, answer } : q
       )
-    })),
+      // Also update the question in its session so state persists across page switches
+      const updatedSessions = state.sessions.map((session) => ({
+        ...session,
+        questions: session.questions.map((q) =>
+          q.id === questionId ? { ...q, answered: true, answer } : q
+        )
+      }))
+      return { currentQuestions: updatedQuestions, sessions: updatedSessions }
+    }),
 
   switchToPage: (pageIndex) => {
     const { sessions } = get()
+    if (pageIndex < 0) {
+      // All Pages view — show all questions from latest session
+      const latest = sessions[sessions.length - 1]
+      set({
+        currentQuestions: latest?.questions || [],
+        completeness: latest?.completeness || null,
+        error: null
+      })
+      return
+    }
     const pageSessions = sessions.filter((s) => s.pageIndex === pageIndex)
     const latest = pageSessions[pageSessions.length - 1]
     if (latest) {

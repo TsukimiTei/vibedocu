@@ -27,7 +27,7 @@ function countWords(text: string): number {
 }
 
 export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
-  const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, currentPageIndex } = useDocumentStore()
+  const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, activePageIndex } = useDocumentStore()
   const isLoading = useAgentStore((s) => s.isLoading)
   const sessions = useAgentStore((s) => s.sessions)
 
@@ -38,8 +38,8 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
   const detailsPanelRef = useRef<HTMLDivElement>(null)
 
   const pages = parsePages(content)
-  const pageContent = getPageContent(content, currentPageIndex)
-  const basePrdContent = currentPageIndex > 0 ? getPageContent(content, 0) : null
+  const pageContent = getPageContent(content, activePageIndex)
+  const basePrdContent = activePageIndex > 0 ? getPageContent(content, 0) : null
   const message = filePath && content ? buildCopyMessage(filePath, pageContent, basePrdContent) : ''
 
   const handleCopyPath = async () => {
@@ -77,7 +77,7 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
 
   const detailRows = [
     { label: '文件路径', value: filePath || '—' },
-    { label: '当前页面', value: pages[currentPageIndex]?.name || 'Base PRD' },
+    { label: '当前页面', value: pages[activePageIndex]?.name || 'Base PRD' },
     { label: '页面数', value: `${pages.length}` },
     { label: '创建时间', value: formatTime(createdAt) },
     { label: '最后编辑', value: formatTime(lastEdited) },
@@ -89,7 +89,7 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
   return (
     <div className="relative flex items-center justify-between px-4 py-2 border-b border-border bg-bg-primary shrink-0">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-text-muted truncate max-w-[200px]">
+        <span className="text-[13px] text-text-muted truncate max-w-[200px]">
           {filePath ? getFileName(filePath) : 'Untitled'}
         </span>
         {isDirty && (
@@ -103,7 +103,7 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
           Details
         </Button>
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1 shrink-0">
         <Button size="sm" variant="ghost" onClick={onSave} disabled={!isDirty}>
           Save
         </Button>
@@ -116,16 +116,16 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
           onClick={() => { setShowMessagePanel(!showMessagePanel); setShowDetails(false) }}
           disabled={!content}
         >
-          Copy Message
+          Copy Msg
         </Button>
         <button
-          onClick={onUpdate}
-          disabled={isLoading}
-          className="inline-flex items-center gap-2 px-3 py-1 rounded border border-accent-blue/30 bg-accent-blue/20 text-accent-blue text-xs font-mono hover:bg-accent-blue/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {isLoading ? 'Analyzing...' : 'Update'}
-          <kbd className="px-1.5 py-0.5 rounded bg-accent-blue/20 text-[10px] font-mono text-accent-blue/70">⌘↵</kbd>
-        </button>
+            onClick={onUpdate}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-accent-blue/30 bg-accent-blue/20 text-accent-blue text-[13px] font-mono hover:bg-accent-blue/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Analyzing...' : 'Update'}
+            <kbd className="px-1 py-0.5 rounded bg-accent-blue/20 text-[10px] font-mono text-accent-blue/70">⌘↵</kbd>
+          </button>
       </div>
 
       {showDetails && (

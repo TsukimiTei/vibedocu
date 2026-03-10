@@ -63,21 +63,22 @@
   --theme-heading: #2a2015;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  *, *::before, *::after {
+    margin: 0;
+    box-sizing: border-box;
+  }
 
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  background-color: var(--theme-bg-primary);
-  color: var(--theme-text-primary);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  -webkit-font-smoothing: antialiased;
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background-color: var(--theme-bg-primary);
+    color: var(--theme-text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -99,6 +100,12 @@ html, body, #root {
   background-color: var(--theme-selection);
 }
 
-.app-drag-region {
-  -webkit-app-region: drag;
+@layer utilities {
+  .app-drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
 }
