@@ -20,34 +20,20 @@ export function buildAnalysisPrompt(markdown: string, basePrdContext?: string | 
 
 export function buildCopyMessage(
   filePath: string,
-  pageContent: string,
-  basePrdContent?: string | null
+  pageName: string,
+  pageIndex: number
 ): string {
-  if (basePrdContent) {
+  if (pageIndex > 0) {
     return `I have a requirements document at: ${filePath}
 
-Here is the base PRD:
+Please read this file. The document contains multiple pages separated by \`---\` followed by \`# [Page Name]\` headers.
 
-\`\`\`markdown
-${basePrdContent}
-\`\`\`
+Use the "Base PRD" section (content before the first \`---\` page break) as background context, then focus on implementing the feature described in the page titled "${pageName}" (the section starting with \`# [${pageName}]\`).
 
-Here is the specific feature/iteration to implement:
-
-\`\`\`markdown
-${pageContent}
-\`\`\`
-
-Please help me implement this feature based on the base PRD context and the specific requirements above.`
+Only implement the requirements from the "${pageName}" page.`
   }
 
   return `I have a requirements document at: ${filePath}
 
-Here is the current content:
-
-\`\`\`markdown
-${pageContent}
-\`\`\`
-
-Please help me implement this project based on the requirements above.`
+Please read this file and implement the project based on the "Base PRD" section (the content before the first \`---\` page break). Ignore any subsequent feature pages.`
 }

@@ -4,6 +4,8 @@ import { EditorToolbar } from './EditorToolbar'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { parsePages, getPageBody, updatePageBody, addNewPage, getPageVersion } from '@/lib/page-utils'
+import { buildCopyMessage } from '@/services/prompt-builder'
+import { copyToClipboard } from '@/services/file-bridge'
 import type { EditorHandle } from '@/hooks/useEditor'
 
 interface EditorPanelProps {
@@ -147,6 +149,17 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave }: EditorPanelPr
                 {page.name}
               </span>
               <div className="flex-1 h-px bg-border" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const store = useDocumentStore.getState()
+                  const msg = buildCopyMessage(store.filePath || '', page.name, i)
+                  copyToClipboard(msg)
+                }}
+                className="text-[11px] text-text-muted hover:text-accent-green font-mono cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-accent-green/10"
+              >
+                Copy Msg
+              </button>
               {i === activePageIndex && (
                 <span className="text-[10px] text-accent-blue/60 font-mono">EDITING</span>
               )}

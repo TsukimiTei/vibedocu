@@ -5,7 +5,7 @@ import { useAgentStore } from '@/stores/agent-store'
 import { copyToClipboard } from '@/services/file-bridge'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { getFileName } from '@/lib/utils'
-import { getPageContent, parsePages } from '@/lib/page-utils'
+import { parsePages } from '@/lib/page-utils'
 
 interface EditorToolbarProps {
   onUpdate: () => void
@@ -38,9 +38,8 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
   const detailsPanelRef = useRef<HTMLDivElement>(null)
 
   const pages = parsePages(content)
-  const pageContent = getPageContent(content, activePageIndex)
-  const basePrdContent = activePageIndex > 0 ? getPageContent(content, 0) : null
-  const message = filePath && content ? buildCopyMessage(filePath, pageContent, basePrdContent) : ''
+  const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
+  const message = filePath && content ? buildCopyMessage(filePath, currentPageName, activePageIndex) : ''
 
   const handleCopyPath = async () => {
     if (filePath) await copyToClipboard(filePath)
@@ -77,12 +76,12 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
 
   const detailRows = [
     { label: '文件路径', value: filePath || '—' },
-    { label: '当前页面', value: pages[activePageIndex]?.name || 'Base PRD' },
+    { label: '当前页面', value: currentPageName },
     { label: '页面数', value: `${pages.length}` },
     { label: '创建时间', value: formatTime(createdAt) },
     { label: '最后编辑', value: formatTime(lastEdited) },
     { label: '最后保存', value: formatTime(lastSaved) },
-    { label: '字数 (当前页)', value: pageContent ? countWords(pageContent).toLocaleString() : '0' },
+    { label: '字数 (当前页)', value: pages[activePageIndex] ? countWords(pages[activePageIndex].content).toLocaleString() : '0' },
     { label: '问答轮次', value: `${sessions.length}` },
   ]
 
