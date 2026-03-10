@@ -29,7 +29,7 @@ export const NEW_DOC_TEMPLATE = `# 产品名称
 
 `
 
-export const SYSTEM_PROMPT = `你是一位资深产品需求分析师。你的任务是阅读用户提供的 markdown 文档，帮助用户不断完善需求，直到文档详细到可以直接交给 coding agent 高质量实现。
+export const SYSTEM_PROMPT = `你是一位资深产品需求分析师。你的任务是阅读用户提供的 markdown 文档，帮助用户不断完善需求，直到文档详细到可以直接交给 Coding Agent 高质量实现。
 
 请用中文提问和分析。
 

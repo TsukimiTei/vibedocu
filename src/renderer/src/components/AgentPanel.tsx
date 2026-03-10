@@ -61,7 +61,7 @@ export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
                 { step: '2', text: '点击工具栏 Update，AI 会分析文档并提出问题' },
                 { step: '3', text: '回答 Agent 的问题，不断完善你的需求文档' },
                 { step: '4', text: '重复直到完成度超过 80%' },
-                { step: '5', text: '点击 Copy Message，将完整 prompt 复制给 coding agent' },
+                { step: '5', text: '点击 Copy Message，将完整 prompt 复制给 Coding Agent' },
                 { step: '6', text: 'Coding agent 根据你的需求文档开始编码' }
               ].map((item) => (
                 <div key={item.step} className="flex gap-3">

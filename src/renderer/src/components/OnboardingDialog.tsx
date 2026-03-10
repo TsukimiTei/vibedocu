@@ -16,13 +16,13 @@ const steps = [
           一个 idea，一份完整的 PRD。
         </p>
         <p>
-          灵感是碎片的，PRD 不能是。在 vibe coding 时代，coding agent 需要一份足够详细的需求文档才能精准执行。
+          灵感是碎片的，PRD 不能是。在 vibe coding 时代，Coding Agent 需要一份足够详细的需求文档才能精准执行。
         </p>
         <p>
           但大多数人写需求时会遗漏关键细节：边界情况、技术约束、成功指标……这些缺失直接导致 AI 生成的代码质量下降。
         </p>
         <p className="text-text-primary font-medium">
-          VibeDocs 的 AI Agent 替你追问每一个你没想到的细节，直到文档详细到 coding agent 能精准执行。
+          VibeDocs 的 AI Agent 替你追问每一个你没想到的细节，直到文档详细到 Coding Agent 能精准执行。
         </p>
       </div>
     )
@@ -70,7 +70,7 @@ const steps = [
           当完成度足够高时，点击工具栏的 <span className="text-text-primary font-medium">Copy Message</span>，会生成一段完整的 prompt，包含文件路径和文档全文。
         </p>
         <p>
-          将它粘贴给任何 coding agent（Claude Code、Cursor、Copilot…），就能获得高质量的代码实现。
+          将它粘贴给任何 Coding Agent（Claude Code、Cursor、Copilot…），就能获得高质量的代码实现。
         </p>
         <div className="mt-4 p-3 rounded-lg border border-border bg-bg-tertiary">
           <p className="text-xs text-text-muted mb-2">快捷键</p>

@@ -65,7 +65,7 @@ export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
 
         <div className="mt-8 pt-4 border-t border-border">
           <p className="text-xs text-text-muted">
-            灵感是碎片的，PRD 不能是。AI Agent 替你追问每一个你没想到的细节，直到 coding agent 能精准执行。
+            灵感是碎片的，PRD 不能是。AI Agent 替你追问每一个你没想到的细节，直到 Coding Agent 能精准执行。
           </p>
         </div>
       </div>
