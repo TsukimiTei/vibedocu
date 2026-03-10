@@ -32,3 +32,29 @@ export async function saveImage(
 
   return `./${docName}/assets/${filename}`
 }
+
+/** Get the path for agent session data file associated with a document */
+function getAgentDataPath(docPath: string): string {
+  const docName = parse(docPath).name
+  const docDir = dirname(docPath)
+  return join(docDir, docName, 'agent-sessions.json')
+}
+
+export async function readAgentData(docPath: string): Promise<string | null> {
+  const dataPath = getAgentDataPath(docPath)
+  if (!existsSync(dataPath)) return null
+  try {
+    return await fsReadFile(dataPath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+export async function writeAgentData(docPath: string, data: string): Promise<void> {
+  const dataPath = getAgentDataPath(docPath)
+  const dir = dirname(dataPath)
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true })
+  }
+  await fsWriteFile(dataPath, data, 'utf-8')
+}

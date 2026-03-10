@@ -1,15 +1,19 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from './ui/Button'
+import { Dialog } from './ui/Dialog'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
-import { copyToClipboard } from '@/services/file-bridge'
+import { useSettingsStore } from '@/stores/settings-store'
+import { copyToClipboard, syncToVault } from '@/services/file-bridge'
 import { buildCopyMessage } from '@/services/prompt-builder'
+import { toast } from './ui/Toast'
 import { getFileName } from '@/lib/utils'
 import { parsePages } from '@/lib/page-utils'
 
 interface EditorToolbarProps {
   onUpdate: () => void
   onSave: () => void
+  onOpenSettings: () => void
 }
 
 function formatTime(ts: number | null): string {
@@ -26,14 +30,16 @@ function countWords(text: string): number {
   return chinese + english
 }
 
-export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
+export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolbarProps) {
   const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, activePageIndex } = useDocumentStore()
   const isLoading = useAgentStore((s) => s.isLoading)
   const sessions = useAgentStore((s) => s.sessions)
 
   const [showMessagePanel, setShowMessagePanel] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'msg' | 'path' | false>(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [showConflictDialog, setShowConflictDialog] = useState(false)
   const messagePanelRef = useRef<HTMLDivElement>(null)
   const detailsPanelRef = useRef<HTMLDivElement>(null)
 
@@ -42,14 +48,70 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
   const message = filePath && content ? buildCopyMessage(filePath, currentPageName, activePageIndex) : ''
 
   const handleCopyPath = async () => {
-    if (filePath) await copyToClipboard(filePath)
+    if (filePath) {
+      await copyToClipboard(filePath)
+      setCopied('path')
+      setTimeout(() => setCopied(false), 1500)
+    }
   }
 
-  const handleCopy = async () => {
+  const handleCopyMsg = async () => {
     await copyToClipboard(message)
-    setCopied(true)
+    setCopied('msg')
     setTimeout(() => setCopied(false), 1500)
   }
+
+  const doSync = useCallback(async (overwrite: boolean) => {
+    const vaultPath = useSettingsStore.getState().obsidianVaultPath
+    if (!filePath) return
+
+    // Save before syncing to ensure latest content is on disk
+    if (isDirty) {
+      await window.api.file.write(filePath, content)
+      useDocumentStore.getState().markSaved()
+    }
+
+    setIsSyncing(true)
+    try {
+      const result = await syncToVault(filePath, vaultPath, overwrite)
+      if (result.conflict) {
+        setShowConflictDialog(true)
+      } else if (result.success) {
+        toast('同步成功', 'success')
+      } else {
+        toast(result.error || '同步失败', 'error', {
+          label: '打开设置',
+          onClick: onOpenSettings
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[sync] error:', msg)
+      toast(`同步失败: ${msg}`, 'error', {
+        label: '打开设置',
+        onClick: onOpenSettings
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [filePath, isDirty, content, onOpenSettings])
+
+  const handleSync = useCallback(() => {
+    const vaultPath = useSettingsStore.getState().obsidianVaultPath
+    if (!vaultPath) {
+      toast('请先配置 Obsidian Vault 路径', 'info', {
+        label: '打开设置',
+        onClick: onOpenSettings
+      })
+      return
+    }
+    doSync(false)
+  }, [doSync, onOpenSettings])
+
+  const handleConflictOverwrite = useCallback(() => {
+    setShowConflictDialog(false)
+    doSync(true)
+  }, [doSync])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -103,19 +165,16 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
         </Button>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <Button size="sm" variant="ghost" onClick={onSave} disabled={!isDirty}>
-          Save
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleCopyPath} disabled={!filePath}>
-          Copy Path
+        <Button size="sm" variant="ghost" onClick={handleSync} disabled={!filePath || isSyncing}>
+          {isSyncing ? 'Syncing...' : 'Sync'}
         </Button>
         <Button
           size="sm"
           variant="ghost"
           onClick={() => { setShowMessagePanel(!showMessagePanel); setShowDetails(false) }}
-          disabled={!content}
+          disabled={!filePath}
         >
-          Copy Msg
+          Copy
         </Button>
         <button
             onClick={onUpdate}
@@ -149,15 +208,29 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
       {showMessagePanel && (
         <div
           ref={messagePanelRef}
-          className="absolute right-4 top-full mt-1 z-50 w-[480px] max-h-[400px] flex flex-col rounded-lg border border-border bg-bg-primary shadow-2xl"
+          className="absolute right-4 top-full mt-1 z-50 w-[480px] max-h-[440px] flex flex-col rounded-lg border border-border bg-bg-primary shadow-2xl"
         >
+          {/* Copy Path */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-            <span className="text-sm font-medium text-text-primary">Message Preview</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-[11px] text-text-muted font-mono uppercase tracking-wider">Path</span>
+              <p className="text-xs text-text-secondary font-mono truncate mt-0.5">{filePath || '—'}</p>
+            </div>
             <button
-              onClick={handleCopy}
+              onClick={handleCopyPath}
+              className="shrink-0 ml-3 px-3 py-1 rounded text-xs font-medium bg-bg-secondary text-text-secondary border border-border hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer"
+            >
+              {copied === 'path' ? 'Copied!' : 'Copy Path'}
+            </button>
+          </div>
+          {/* Copy Message */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+            <span className="text-[11px] text-text-muted font-mono uppercase tracking-wider">Message</span>
+            <button
+              onClick={handleCopyMsg}
               className="px-3 py-1 rounded text-xs font-medium bg-accent-green/15 text-accent-green border border-accent-green/30 hover:bg-accent-green/25 transition-colors cursor-pointer"
             >
-              {copied ? 'Copied!' : 'Copy'}
+              {copied === 'msg' ? 'Copied!' : 'Copy Message'}
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
@@ -167,6 +240,30 @@ export function EditorToolbar({ onUpdate, onSave }: EditorToolbarProps) {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={showConflictDialog}
+        onClose={() => setShowConflictDialog(false)}
+        title="文件冲突"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-text-secondary font-mono leading-relaxed">
+            Vault 中已存在同名文件 <span className="text-text-primary">{filePath ? getFileName(filePath) : ''}</span>，是否覆盖？
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowConflictDialog(false)}>
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConflictOverwrite}
+            >
+              覆盖
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   )
 }

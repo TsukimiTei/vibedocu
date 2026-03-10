@@ -98,6 +98,13 @@ export function getPageVersion(pageIndex: number): string {
   return `v1.${pageIndex}`
 }
 
+/** Extract the first # heading from a page's body (after the # [PageName] heading) */
+export function getPageTitle(fullContent: string, pageIndex: number): string {
+  const body = getPageBody(fullContent, pageIndex)
+  const match = body.match(/^#\s+(.+)$/m)
+  return match ? match[1].trim() : ''
+}
+
 export function renamePage(fullContent: string, pageIndex: number, newName: string): string {
   const pages = parsePages(fullContent)
   if (pageIndex <= 0 || !pages[pageIndex]) return fullContent

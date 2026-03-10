@@ -3,6 +3,7 @@ import { Dialog } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { ModelSelector } from './ModelSelector'
 import { useSettingsStore } from '@/stores/settings-store'
+import { chooseDirectory } from '@/services/file-bridge'
 import type { ThemeId } from '@/types/settings'
 
 interface SettingsDialogProps {
@@ -16,12 +17,17 @@ const themes: { id: ThemeId; name: string; preview: string }[] = [
 ]
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
-  const { apiKey, setApiKey, theme, setTheme } = useSettingsStore()
+  const { apiKey, setApiKey, theme, setTheme, obsidianVaultPath, setObsidianVaultPath } = useSettingsStore()
   const [tempKey, setTempKey] = useState(apiKey)
 
   const handleSave = () => {
     setApiKey(tempKey.trim())
     onClose()
+  }
+
+  const handleChooseVault = async () => {
+    const dir = await chooseDirectory()
+    if (dir) setObsidianVaultPath(dir)
   }
 
   return (
@@ -44,6 +50,28 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </div>
 
         <ModelSelector />
+
+        <div>
+          <label className="block text-xs text-text-muted mb-1.5">
+            Obsidian Vault 路径
+          </label>
+          <div className="flex gap-2">
+            <div className="flex-1 bg-bg-tertiary border border-border rounded px-3 py-2 text-xs text-text-secondary font-mono truncate min-h-[34px] flex items-center">
+              {obsidianVaultPath || '未配置'}
+            </div>
+            <Button size="sm" variant="ghost" onClick={handleChooseVault}>
+              选择
+            </Button>
+            {obsidianVaultPath && (
+              <Button size="sm" variant="ghost" onClick={() => setObsidianVaultPath('')}>
+                清除
+              </Button>
+            )}
+          </div>
+          <p className="text-[10px] text-text-muted mt-1">
+            选择 Obsidian Vault 目录，用于同步文档
+          </p>
+        </div>
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">Theme</label>

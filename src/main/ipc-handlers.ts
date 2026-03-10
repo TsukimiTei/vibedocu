@@ -1,6 +1,7 @@
 import { ipcMain, app } from 'electron'
-import { readFile, writeFile, saveImage } from './file-service'
+import { readFile, writeFile, saveImage, readAgentData, writeAgentData } from './file-service'
 import { openFileDialog, chooseDirectoryDialog } from './dialog-service'
+import { checkSyncConflict, syncToVault } from './sync-service'
 import { clipboard } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -50,4 +51,23 @@ export function registerIpcHandlers(): void {
     clipboard.writeText(text)
     return true
   })
+
+  ipcMain.handle('agent:read', async (_event, docPath: string) => {
+    return readAgentData(docPath)
+  })
+
+  ipcMain.handle('agent:write', async (_event, docPath: string, data: string) => {
+    return writeAgentData(docPath, data)
+  })
+
+  ipcMain.handle('sync:checkConflict', async (_event, filePath: string, vaultPath: string) => {
+    return checkSyncConflict(filePath, vaultPath)
+  })
+
+  ipcMain.handle(
+    'sync:toVault',
+    async (_event, filePath: string, vaultPath: string, overwrite: boolean) => {
+      return syncToVault(filePath, vaultPath, overwrite)
+    }
+  )
 }

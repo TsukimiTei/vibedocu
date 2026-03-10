@@ -39,13 +39,27 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
     setCustomInput('')
   }
 
+  if (question.answered) {
+    return (
+      <Card className="transition-all duration-200 opacity-60 border-accent-green/20">
+        <div className="flex items-start gap-2 mb-2">
+          <span className="text-xs font-semibold text-accent-green font-mono">&#10003; 已添加</span>
+          <span
+            className={cn(
+              'text-xs font-semibold uppercase tracking-wider',
+              categoryColors[question.category] || 'text-text-muted'
+            )}
+          >
+            {question.category}
+          </span>
+        </div>
+        <h3 className="text-sm text-text-muted leading-snug line-through decoration-text-muted/30">{question.text}</h3>
+      </Card>
+    )
+  }
+
   return (
-    <Card
-      className={cn(
-        'transition-all duration-200',
-        question.answered && 'opacity-50'
-      )}
-    >
+    <Card className="transition-all duration-200">
       <div className="flex items-start gap-2 mb-2">
         <span
           className={cn(

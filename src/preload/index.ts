@@ -18,6 +18,22 @@ const api = {
   settings: {
     read: (): Promise<string | null> => ipcRenderer.invoke('settings:read'),
     write: (data: string): Promise<void> => ipcRenderer.invoke('settings:write', data)
+  },
+  agent: {
+    read: (docPath: string): Promise<string | null> =>
+      ipcRenderer.invoke('agent:read', docPath),
+    write: (docPath: string, data: string): Promise<void> =>
+      ipcRenderer.invoke('agent:write', docPath, data)
+  },
+  sync: {
+    checkConflict: (filePath: string, vaultPath: string): Promise<boolean> =>
+      ipcRenderer.invoke('sync:checkConflict', filePath, vaultPath),
+    toVault: (
+      filePath: string,
+      vaultPath: string,
+      overwrite: boolean
+    ): Promise<{ success: boolean; error?: string; conflict?: boolean }> =>
+      ipcRenderer.invoke('sync:toVault', filePath, vaultPath, overwrite)
   }
 }
 

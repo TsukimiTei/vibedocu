@@ -22,6 +22,7 @@ interface SettingsStore {
   theme: ThemeId
   hasSeenOnboarding: boolean
   recentFiles: string[]
+  obsidianVaultPath: string
 
   setApiKey: (key: string) => void
   setModel: (model: string) => void
@@ -29,6 +30,7 @@ interface SettingsStore {
   markOnboardingSeen: () => void
   addRecentFile: (filePath: string) => void
   removeRecentFile: (filePath: string) => void
+  setObsidianVaultPath: (path: string) => void
 }
 
 function applyTheme(theme: ThemeId) {
@@ -43,10 +45,12 @@ export const useSettingsStore = create<SettingsStore>()(
       theme: 'dark' as ThemeId,
       hasSeenOnboarding: false,
       recentFiles: [],
+      obsidianVaultPath: '',
 
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
       markOnboardingSeen: () => set({ hasSeenOnboarding: true }),
+      setObsidianVaultPath: (path) => set({ obsidianVaultPath: path }),
       setTheme: (theme) => {
         applyTheme(theme)
         set({ theme })

@@ -3,7 +3,7 @@ import { MarkdownEditor } from './MarkdownEditor'
 import { EditorToolbar } from './EditorToolbar'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
-import { parsePages, getPageBody, updatePageBody, addNewPage, getPageVersion } from '@/lib/page-utils'
+import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
 import type { EditorHandle } from '@/hooks/useEditor'
@@ -12,9 +12,10 @@ interface EditorPanelProps {
   activeEditorRef: React.MutableRefObject<EditorHandle | null>
   onUpdate: () => void
   onSave: () => void
+  onOpenSettings: () => void
 }
 
-export function EditorPanel({ activeEditorRef, onUpdate, onSave }: EditorPanelProps) {
+export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings }: EditorPanelProps) {
   const { content, activePageIndex, setContent, markDirty, setActivePageIndex } = useDocumentStore()
   const editorRefs = useRef<Map<number, EditorHandle>>(new Map())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -134,7 +135,7 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave }: EditorPanelPr
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
-      <EditorToolbar onUpdate={onUpdate} onSave={onSave} />
+      <EditorToolbar onUpdate={onUpdate} onSave={onSave} onOpenSettings={onOpenSettings} />
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         {pages.map((page, i) => (
           <div key={i} data-page-index={i} onFocus={() => handleFocus(i)}>
@@ -142,12 +143,21 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave }: EditorPanelPr
             <div className={`flex items-center gap-3 px-6 py-3 border-b border-border sticky top-0 z-10 ${
               i === activePageIndex ? 'bg-accent-blue/5' : 'bg-bg-secondary'
             }`}>
-              <span className="text-[13px] font-semibold text-accent-blue font-mono">
+              <span className="text-[13px] font-semibold text-accent-blue font-mono shrink-0">
                 {getPageVersion(i)}
               </span>
-              <span className="text-[13px] font-medium text-text-primary font-mono">
+              <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
+              <span className="text-[13px] font-medium text-text-primary font-mono shrink-0">
                 {page.name}
               </span>
+              {i > 0 && getPageTitle(content, i) && (
+                <>
+                  <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
+                  <span className="text-[13px] text-text-secondary font-mono truncate">
+                    {getPageTitle(content, i)}
+                  </span>
+                </>
+              )}
               <div className="flex-1 h-px bg-border" />
               <button
                 onClick={(e) => {

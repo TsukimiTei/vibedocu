@@ -27,3 +27,15 @@ export async function saveImage(
 export async function copyToClipboard(text: string): Promise<void> {
   await api.clipboard.writeText(text)
 }
+
+export async function checkSyncConflict(filePath: string, vaultPath: string): Promise<boolean> {
+  return api.sync.checkConflict(filePath, vaultPath)
+}
+
+export async function syncToVault(
+  filePath: string,
+  vaultPath: string,
+  overwrite: boolean = false
+): Promise<{ success: boolean; error?: string; conflict?: boolean }> {
+  return api.sync.toVault(filePath, vaultPath, overwrite)
+}
