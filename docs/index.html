@@ -32,7 +32,84 @@
       scroll-behavior: smooth;
     }
 
-    body { overflow-x: hidden; }
+    body { overflow-x: hidden; position: relative; }
+
+    /* Animated background blobs */
+    .bg-blobs {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.12;
+      will-change: transform;
+    }
+    .blob-1 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, var(--blue), transparent 70%);
+      top: -10%; left: -5%;
+      animation: drift1 25s ease-in-out infinite;
+    }
+    .blob-2 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, var(--purple), transparent 70%);
+      top: 30%; right: -10%;
+      animation: drift2 30s ease-in-out infinite;
+    }
+    .blob-3 {
+      width: 450px; height: 450px;
+      background: radial-gradient(circle, var(--green), transparent 70%);
+      bottom: 10%; left: 15%;
+      animation: drift3 22s ease-in-out infinite;
+    }
+    .blob-4 {
+      width: 350px; height: 350px;
+      background: radial-gradient(circle, var(--orange), transparent 70%);
+      top: 60%; left: 50%;
+      animation: drift4 28s ease-in-out infinite;
+    }
+    .blob-5 {
+      width: 550px; height: 550px;
+      background: radial-gradient(circle, var(--blue), var(--purple) 50%, transparent 70%);
+      top: -5%; right: 20%;
+      animation: drift5 35s ease-in-out infinite;
+      opacity: 0.08;
+    }
+
+    @keyframes drift1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(80px, 60px) scale(1.1); }
+      50% { transform: translate(30px, 120px) scale(0.95); }
+      75% { transform: translate(-40px, 50px) scale(1.05); }
+    }
+    @keyframes drift2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(-70px, 80px) scale(1.08); }
+      50% { transform: translate(-120px, 20px) scale(0.92); }
+      75% { transform: translate(-30px, -60px) scale(1.04); }
+    }
+    @keyframes drift3 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      30% { transform: translate(100px, -50px) scale(1.12); }
+      60% { transform: translate(40px, -100px) scale(0.9); }
+      80% { transform: translate(-30px, -30px) scale(1.06); }
+    }
+    @keyframes drift4 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      20% { transform: translate(-60px, -80px) scale(1.1); }
+      45% { transform: translate(50px, -40px) scale(0.95); }
+      70% { transform: translate(80px, 30px) scale(1.08); }
+    }
+    @keyframes drift5 {
+      0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+      33% { transform: translate(-50px, 70px) scale(1.15) rotate(10deg); }
+      66% { transform: translate(60px, -30px) scale(0.88) rotate(-5deg); }
+    }
 
     ::selection { background: rgba(96, 165, 250, 0.3); }
 
@@ -43,6 +120,8 @@
       max-width: 860px;
       margin: 0 auto;
       padding: 0 24px;
+      position: relative;
+      z-index: 1;
     }
 
     /* Nav */
@@ -83,6 +162,8 @@
     .hero {
       padding: 140px 0 80px;
       text-align: center;
+      position: relative;
+      z-index: 1;
     }
     .hero .badge {
       display: inline-block;
@@ -181,6 +262,8 @@
     /* Features */
     .features {
       padding: 100px 0;
+      position: relative;
+      z-index: 1;
     }
     .features h2 {
       font-size: 28px;
@@ -228,6 +311,8 @@
     .how {
       padding: 80px 0 100px;
       border-top: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
     }
     .how h2 {
       font-size: 28px;
@@ -277,6 +362,8 @@
       padding: 80px 0;
       text-align: center;
       border-top: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
     }
     .cta h2 {
       font-size: 24px;
@@ -297,6 +384,8 @@
       text-align: center;
       font-size: 12px;
       color: var(--muted);
+      position: relative;
+      z-index: 1;
     }
 
     @media (max-width: 600px) {
@@ -306,6 +395,14 @@
   </style>
 </head>
 <body>
+
+<div class="bg-blobs">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+  <div class="blob blob-4"></div>
+  <div class="blob blob-5"></div>
+</div>
 
 <nav>
   <div class="container">
