@@ -13,16 +13,16 @@ const steps = [
     content: (
       <div className="space-y-3 text-sm text-text-secondary leading-relaxed">
         <p className="text-base text-text-primary font-medium">
-          写需求文档，不再是你一个人的事。
+          一个 idea，一份完整的 PRD。
         </p>
         <p>
-          在 vibe coding 时代，我们用 AI 写代码。但 AI 写出好代码的前提是——你得给它一份足够详细的需求文档。
+          灵感是碎片的，PRD 不能是。在 vibe coding 时代，coding agent 需要一份足够详细的需求文档才能精准执行。
         </p>
         <p>
-          问题是，大多数人写需求时会遗漏关键细节：边界情况、技术约束、成功指标……这些缺失会直接导致 AI 生成的代码质量下降。
+          但大多数人写需求时会遗漏关键细节：边界情况、技术约束、成功指标……这些缺失直接导致 AI 生成的代码质量下降。
         </p>
         <p className="text-text-primary font-medium">
-          VibeDocs 通过 AI Agent 不断向你提问，帮你把需求文档打磨到"可以直接交给 coding agent"的程度。
+          VibeDocs 的 AI Agent 替你追问每一个你没想到的细节，直到文档详细到 coding agent 能精准执行。
         </p>
       </div>
     )
@@ -81,7 +81,7 @@ const steps = [
           </div>
         </div>
         <p className="text-text-primary font-medium mt-4">
-          现在，开始写下你的第一个想法吧。
+          产品经理的项目落地大杀器——现在，开始写下你的第一个想法吧。
         </p>
       </div>
     )

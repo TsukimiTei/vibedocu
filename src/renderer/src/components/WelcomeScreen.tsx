@@ -17,7 +17,7 @@ export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-text-primary mb-1">VibeDocs</h1>
           <p className="text-xs text-text-muted">
-            AI-powered requirement refinement for vibe coding
+            一个 idea，一份完整的 PRD — 产品经理的项目落地大杀器
           </p>
         </div>
 
@@ -65,8 +65,7 @@ export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
 
         <div className="mt-8 pt-4 border-t border-border">
           <p className="text-xs text-text-muted">
-            Open or create a markdown document, then let the AI agent ask questions to refine
-            your requirements until they are ready for implementation.
+            灵感是碎片的，PRD 不能是。AI Agent 替你追问每一个你没想到的细节，直到 coding agent 能精准执行。
           </p>
         </div>
       </div>
