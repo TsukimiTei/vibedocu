@@ -7,11 +7,13 @@ interface SettingsStore {
   apiKey: string
   model: string
   theme: ThemeId
+  hasSeenOnboarding: boolean
   recentFiles: string[]
 
   setApiKey: (key: string) => void
   setModel: (model: string) => void
   setTheme: (theme: ThemeId) => void
+  markOnboardingSeen: () => void
   addRecentFile: (filePath: string) => void
   removeRecentFile: (filePath: string) => void
 }
@@ -26,10 +28,12 @@ export const useSettingsStore = create<SettingsStore>()(
       apiKey: '',
       model: DEFAULT_MODEL,
       theme: 'dark' as ThemeId,
+      hasSeenOnboarding: false,
       recentFiles: [],
 
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
+      markOnboardingSeen: () => set({ hasSeenOnboarding: true }),
       setTheme: (theme) => {
         applyTheme(theme)
         set({ theme })

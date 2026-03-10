@@ -3,7 +3,11 @@ import { useFileOps } from '@/hooks/useFileOps'
 import { useSettingsStore } from '@/stores/settings-store'
 import { getFileName } from '@/lib/utils'
 
-export function WelcomeScreen() {
+interface WelcomeScreenProps {
+  onCreateNew?: () => void
+}
+
+export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
   const { openExisting, openRecent, createNew } = useFileOps()
   const { recentFiles, removeRecentFile } = useSettingsStore()
 
@@ -21,7 +25,7 @@ export function WelcomeScreen() {
           <Button variant="primary" size="lg" onClick={openExisting} className="flex-1">
             Open .md File
           </Button>
-          <Button variant="secondary" size="lg" onClick={createNew} className="flex-1">
+          <Button variant="secondary" size="lg" onClick={onCreateNew || createNew} className="flex-1">
             Create New
           </Button>
         </div>

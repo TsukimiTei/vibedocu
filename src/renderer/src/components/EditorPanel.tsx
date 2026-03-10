@@ -36,10 +36,14 @@ export function EditorPanel({ editorRef, onUpdate, onSave }: EditorPanelProps) {
         e.preventDefault()
         onSave()
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        onUpdate()
+      }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onSave])
+  }, [onSave, onUpdate])
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">

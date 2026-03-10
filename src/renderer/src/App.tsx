@@ -3,6 +3,7 @@ import { WelcomeScreen } from './components/WelcomeScreen'
 import { AgentPanel } from './components/AgentPanel'
 import { EditorPanel } from './components/EditorPanel'
 import { SettingsDialog } from './components/SettingsDialog'
+import { OnboardingDialog } from './components/OnboardingDialog'
 import { SplitPanel } from './components/ui/SplitPanel'
 import { useDocumentStore } from './stores/document-store'
 import { useSettingsStore } from './stores/settings-store'
@@ -13,15 +14,30 @@ import { useAgent } from './hooks/useAgent'
 export default function App() {
   const filePath = useDocumentStore((s) => s.filePath)
   const theme = useSettingsStore((s) => s.theme)
+  const hasSeenOnboarding = useSettingsStore((s) => s.hasSeenOnboarding)
+  const markOnboardingSeen = useSettingsStore((s) => s.markOnboardingSeen)
 
-  // Ensure theme is applied on mount
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
   const { save, openExisting, createNew } = useFileOps()
   const { editorRef, insertAtCursor } = useEditor()
   const { runAnalysis } = useAgent()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
+  const handleCreateNew = useCallback(async () => {
+    const created = await createNew()
+    if (created && !hasSeenOnboarding) {
+      setOnboardingOpen(true)
+    }
+  }, [createNew, hasSeenOnboarding])
+
+  const handleCloseOnboarding = useCallback(() => {
+    setOnboardingOpen(false)
+    markOnboardingSeen()
+  }, [markOnboardingSeen])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -31,12 +47,12 @@ export default function App() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault()
-        createNew()
+        handleCreateNew()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [openExisting, createNew])
+  }, [openExisting, handleCreateNew])
 
   const handleInsert = useCallback(
     (text: string) => {
@@ -51,10 +67,11 @@ export default function App() {
         <div className="h-full flex flex-col">
           <div className="h-8 shrink-0 app-drag-region" />
           <div className="flex-1">
-            <WelcomeScreen />
+            <WelcomeScreen onCreateNew={handleCreateNew} />
           </div>
         </div>
         <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <OnboardingDialog open={onboardingOpen} onClose={handleCloseOnboarding} />
       </>
     )
   }
@@ -82,6 +99,7 @@ export default function App() {
         </div>
       </div>
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <OnboardingDialog open={onboardingOpen} onClose={handleCloseOnboarding} />
     </>
   )
 }

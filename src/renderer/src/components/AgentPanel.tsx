@@ -53,11 +53,25 @@ export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
         )}
 
         {!isLoading && !error && currentQuestions.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-sm text-text-muted mb-1">暂无问题</p>
-            <p className="text-xs text-text-muted">
-              点击编辑器工具栏的 "Update" 来分析你的文档
-            </p>
+          <div className="py-6 space-y-5">
+            <p className="text-sm font-medium text-text-primary">如何使用 VibeDocs</p>
+            <div className="space-y-4">
+              {[
+                { step: '1', text: '在右侧编辑器写下一句话，描述你想做的产品' },
+                { step: '2', text: '点击工具栏 Update，AI 会分析文档并提出问题' },
+                { step: '3', text: '回答 Agent 的问题，不断完善你的需求文档' },
+                { step: '4', text: '重复直到完成度超过 80%' },
+                { step: '5', text: '点击 Copy Message，将完整 prompt 复制给 coding agent' },
+                { step: '6', text: 'Coding agent 根据你的需求文档开始编码' }
+              ].map((item) => (
+                <div key={item.step} className="flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-accent-blue/15 text-accent-blue flex items-center justify-center text-xs font-bold">
+                    {item.step}
+                  </span>
+                  <p className="text-sm text-text-secondary leading-relaxed pt-0.5">{item.text}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
