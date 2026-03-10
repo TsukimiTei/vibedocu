@@ -86,8 +86,8 @@ export function updatePageContent(
 }
 
 export function addNewPage(fullContent: string, pageName: string): string {
-  // Body starts with an empty h1 heading for the user to type a title
-  const pageContent = `# [${pageName}]\n\n# \n`
+  // Body: empty h1 for title + h2 prompt for one-line description
+  const pageContent = `# [${pageName}]\n\n# \n\n## 一句话描述你的功能\n`
   const trimmed = fullContent.trimEnd()
   return trimmed + '\n\n---\n\n' + pageContent
 }
