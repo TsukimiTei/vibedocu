@@ -5,12 +5,19 @@ import { EditorPanel } from './components/EditorPanel'
 import { SettingsDialog } from './components/SettingsDialog'
 import { SplitPanel } from './components/ui/SplitPanel'
 import { useDocumentStore } from './stores/document-store'
+import { useSettingsStore } from './stores/settings-store'
 import { useFileOps } from './hooks/useFileOps'
 import { useEditor } from './hooks/useEditor'
 import { useAgent } from './hooks/useAgent'
 
 export default function App() {
   const filePath = useDocumentStore((s) => s.filePath)
+  const theme = useSettingsStore((s) => s.theme)
+
+  // Ensure theme is applied on mount
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { save, openExisting, createNew } = useFileOps()
   const { editorRef, insertAtCursor } = useEditor()

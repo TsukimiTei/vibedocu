@@ -1,16 +1,23 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { DEFAULT_MODEL } from '@/lib/constants'
+import type { ThemeId } from '@/types/settings'
 
 interface SettingsStore {
   apiKey: string
   model: string
+  theme: ThemeId
   recentFiles: string[]
 
   setApiKey: (key: string) => void
   setModel: (model: string) => void
+  setTheme: (theme: ThemeId) => void
   addRecentFile: (filePath: string) => void
   removeRecentFile: (filePath: string) => void
+}
+
+function applyTheme(theme: ThemeId) {
+  document.documentElement.setAttribute('data-theme', theme)
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -18,10 +25,15 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       apiKey: '',
       model: DEFAULT_MODEL,
+      theme: 'dark' as ThemeId,
       recentFiles: [],
 
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
+      setTheme: (theme) => {
+        applyTheme(theme)
+        set({ theme })
+      },
       addRecentFile: (filePath) =>
         set((state) => ({
           recentFiles: [filePath, ...state.recentFiles.filter((f) => f !== filePath)].slice(0, 10)
@@ -31,6 +43,11 @@ export const useSettingsStore = create<SettingsStore>()(
           recentFiles: state.recentFiles.filter((f) => f !== filePath)
         }))
     }),
-    { name: 'vibedocu-settings' }
+    {
+      name: 'vibedocu-settings',
+      onRehydrateStorage: () => (state) => {
+        if (state?.theme) applyTheme(state.theme)
+      }
+    }
   )
 )

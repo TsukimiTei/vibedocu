@@ -3,20 +3,64 @@
 
 @theme {
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
-  --color-bg-primary: #0a0a0a;
-  --color-bg-secondary: #111111;
-  --color-bg-tertiary: #1a1a1a;
-  --color-bg-hover: #222222;
-  --color-border: #2a2a2a;
-  --color-border-focus: #3a3a3a;
-  --color-text-primary: #e5e5e5;
-  --color-text-secondary: #a0a0a0;
-  --color-text-muted: #666666;
-  --color-accent-green: #4ade80;
-  --color-accent-blue: #60a5fa;
-  --color-accent-orange: #fb923c;
-  --color-accent-red: #f87171;
-  --color-accent-purple: #c084fc;
+  --color-bg-primary: var(--theme-bg-primary);
+  --color-bg-secondary: var(--theme-bg-secondary);
+  --color-bg-tertiary: var(--theme-bg-tertiary);
+  --color-bg-hover: var(--theme-bg-hover);
+  --color-border: var(--theme-border);
+  --color-border-focus: var(--theme-border-focus);
+  --color-text-primary: var(--theme-text-primary);
+  --color-text-secondary: var(--theme-text-secondary);
+  --color-text-muted: var(--theme-text-muted);
+  --color-accent-green: var(--theme-accent-green);
+  --color-accent-blue: var(--theme-accent-blue);
+  --color-accent-orange: var(--theme-accent-orange);
+  --color-accent-red: var(--theme-accent-red);
+  --color-accent-purple: var(--theme-accent-purple);
+}
+
+/* ===== Dark Terminal Theme ===== */
+:root, [data-theme="dark"] {
+  --theme-bg-primary: #0a0a0a;
+  --theme-bg-secondary: #111111;
+  --theme-bg-tertiary: #1a1a1a;
+  --theme-bg-hover: #222222;
+  --theme-border: #2a2a2a;
+  --theme-border-focus: #3a3a3a;
+  --theme-text-primary: #e5e5e5;
+  --theme-text-secondary: #a0a0a0;
+  --theme-text-muted: #666666;
+  --theme-accent-green: #4ade80;
+  --theme-accent-blue: #60a5fa;
+  --theme-accent-orange: #fb923c;
+  --theme-accent-red: #f87171;
+  --theme-accent-purple: #c084fc;
+  --theme-scrollbar: #333;
+  --theme-scrollbar-hover: #444;
+  --theme-selection: rgba(96, 165, 250, 0.3);
+  --theme-heading: #ffffff;
+}
+
+/* ===== Warm Light Theme ===== */
+[data-theme="warm-light"] {
+  --theme-bg-primary: #fdf6e3;
+  --theme-bg-secondary: #f5ecd5;
+  --theme-bg-tertiary: #ede4c8;
+  --theme-bg-hover: #e8ddb8;
+  --theme-border: #d6c9a3;
+  --theme-border-focus: #c4b78e;
+  --theme-text-primary: #3b3124;
+  --theme-text-secondary: #6b5d4a;
+  --theme-text-muted: #9c8b6e;
+  --theme-accent-green: #2e7d32;
+  --theme-accent-blue: #1565c0;
+  --theme-accent-orange: #e65100;
+  --theme-accent-red: #c62828;
+  --theme-accent-purple: #7b1fa2;
+  --theme-scrollbar: #d6c9a3;
+  --theme-scrollbar-hover: #c4b78e;
+  --theme-selection: rgba(21, 101, 192, 0.2);
+  --theme-heading: #2a2015;
 }
 
 * {
@@ -29,8 +73,8 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
+  background-color: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
@@ -44,15 +88,15 @@ html, body, #root {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: var(--theme-scrollbar);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  background: var(--theme-scrollbar-hover);
 }
 
 ::selection {
-  background-color: rgba(96, 165, 250, 0.3);
+  background-color: var(--theme-selection);
 }
 
 .app-drag-region {

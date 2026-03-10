@@ -1,6 +1,9 @@
+export type ThemeId = 'dark' | 'warm-light'
+
 export interface Settings {
   apiKey: string
   model: string
+  theme: ThemeId
   recentFiles: string[]
 }
 

@@ -3,14 +3,20 @@ import { Dialog } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { ModelSelector } from './ModelSelector'
 import { useSettingsStore } from '@/stores/settings-store'
+import type { ThemeId } from '@/types/settings'
 
 interface SettingsDialogProps {
   open: boolean
   onClose: () => void
 }
 
+const themes: { id: ThemeId; name: string; preview: string }[] = [
+  { id: 'dark', name: 'Terminal Dark', preview: '#0a0a0a' },
+  { id: 'warm-light', name: 'Warm Light', preview: '#fdf6e3' }
+]
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
-  const { apiKey, setApiKey } = useSettingsStore()
+  const { apiKey, setApiKey, theme, setTheme } = useSettingsStore()
   const [tempKey, setTempKey] = useState(apiKey)
 
   const handleSave = () => {
@@ -38,6 +44,29 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </div>
 
         <ModelSelector />
+
+        <div>
+          <label className="block text-xs text-text-muted mb-1.5">Theme</label>
+          <div className="flex gap-2">
+            {themes.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className={`flex-1 flex items-center gap-2 px-3 py-2 rounded border text-xs transition-colors cursor-pointer ${
+                  theme === t.id
+                    ? 'border-accent-blue text-text-primary bg-accent-blue/10'
+                    : 'border-border text-text-secondary hover:border-border-focus'
+                }`}
+              >
+                <span
+                  className="w-4 h-4 rounded-full border border-border shrink-0"
+                  style={{ backgroundColor: t.preview }}
+                />
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>

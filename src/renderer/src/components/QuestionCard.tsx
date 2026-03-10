@@ -62,7 +62,7 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
         )}
       </div>
 
-      <h3 className="text-base font-semibold text-white leading-snug mb-3">{question.text}</h3>
+      <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">{question.text}</h3>
 
       <button
         onClick={handleInsertQuestion}
