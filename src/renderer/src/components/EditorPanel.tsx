@@ -279,7 +279,7 @@ function RunButton({ filePath, pageName, pageIndex }: {
     if (!filePath) return
     const msg = buildCopyMessage(filePath, pageName, pageIndex)
     const cwd = filePath.substring(0, filePath.lastIndexOf('/'))
-    window.api.terminal.sendExternal(app, `claude '${msg.replace(/'/g, "'\\''")}'`, cwd)
+    window.api.terminal.sendExternal(app, msg, cwd)
     setStatus(pageName, 'running')
     setShowMenu(false)
   }
