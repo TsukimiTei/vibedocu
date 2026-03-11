@@ -14,14 +14,14 @@ export function LeftPanel({ onInsert, onOpenSettings }: LeftPanelProps) {
   const activeTab = useTerminalStore((s) => s.activeTab)
   const switchToAsk = useTerminalStore((s) => s.switchToAsk)
   const switchToTerminal = useTerminalStore((s) => s.switchToTerminal)
+  const allSessions = useTerminalStore((s) => s.sessions)
 
   const activePageIndex = useDocumentStore((s) => s.activePageIndex)
   const content = useDocumentStore((s) => s.content)
   const pages = parsePages(content)
   const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
 
-  const session = useTerminalStore((s) => s.getSession(currentPageName))
-  const hasSession = useTerminalStore((s) => s.hasSession(currentPageName))
+  const hasSession = !!allSessions[currentPageName]
   const pageStatus = usePageStatusStore((s) => s.getStatus(currentPageName))
 
   // Terminal tab status indicator dot
@@ -63,34 +63,40 @@ export function LeftPanel({ onInsert, onOpenSettings }: LeftPanelProps) {
         </div>
       </div>
 
-      {/* Content — both panels always mounted, toggled via CSS to preserve state */}
+      {/* Content — all panels always mounted, toggled via CSS to preserve state */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
         <div className={`h-full ${activeTab === 'ask' ? '' : 'hidden'}`}>
           <AgentPanel onInsert={onInsert} onOpenSettings={onOpenSettings} />
         </div>
 
         <div className={`h-full flex flex-col ${activeTab === 'terminal' ? '' : 'hidden'}`}>
-          {session ? (
-            <>
+          {/* Render ALL active terminal sessions, show/hide by current page */}
+          {Object.values(allSessions).map((session) => (
+            <div
+              key={session.sessionId}
+              className={`h-full flex flex-col ${session.pageName === currentPageName ? '' : 'hidden'}`}
+            >
               <div className="flex items-center px-4 py-1.5 bg-bg-secondary border-b border-border shrink-0">
                 <span className="text-[11px] font-mono text-text-secondary truncate">
-                  {currentPageName}
+                  {session.pageName}
                 </span>
               </div>
               <div className="flex-1 min-h-0">
                 <TerminalView
-                  key={session.sessionId}
                   sessionId={session.sessionId}
                   cwd={session.cwd}
                   prompt={session.prompt}
                   pageName={session.pageName}
                   onExit={(exitCode) => {
-                    usePageStatusStore.getState().setStatus(currentPageName, exitCode === 0 ? 'completed' : 'failed')
+                    usePageStatusStore.getState().setStatus(session.pageName, exitCode === 0 ? 'completed' : 'failed')
                   }}
                 />
               </div>
-            </>
-          ) : (
+            </div>
+          ))}
+
+          {/* Placeholder when current page has no session */}
+          {!hasSession && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-2">
                 <p className="text-sm text-text-muted font-mono">No terminal session</p>
