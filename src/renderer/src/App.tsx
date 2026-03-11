@@ -6,6 +6,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { OnboardingDialog } from './components/OnboardingDialog'
 import { SplitPanel } from './components/ui/SplitPanel'
 import { ToastContainer } from './components/ui/Toast'
+import { UpdateNotifier } from './components/UpdateNotifier'
 import { useDocumentStore } from './stores/document-store'
 import { useSettingsStore } from './stores/settings-store'
 import { useFileOps } from './hooks/useFileOps'
@@ -74,6 +75,7 @@ export default function App() {
         <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         <OnboardingDialog open={onboardingOpen} onClose={handleCloseOnboarding} />
         <ToastContainer />
+        <UpdateNotifier />
       </>
     )
   }
@@ -105,6 +107,7 @@ export default function App() {
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <OnboardingDialog open={onboardingOpen} onClose={handleCloseOnboarding} />
       <ToastContainer />
+      <UpdateNotifier />
     </>
   )
 }

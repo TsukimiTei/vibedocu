@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 const api = {
   dialog: {
@@ -64,6 +64,18 @@ const api = {
   }
 }
 
+const updater = {
+  check: (): Promise<string | null> => ipcRenderer.invoke('updater:check'),
+  download: (): Promise<boolean> => ipcRenderer.invoke('updater:download'),
+  install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
+  onStatus: (callback: (status: string, data?: any) => void) => {
+    const handler = (_event: IpcRendererEvent, status: string, data?: any) => callback(status, data)
+    ipcRenderer.on('updater:status', handler)
+    return () => { ipcRenderer.removeListener('updater:status', handler) }
+  }
+}
+
 contextBridge.exposeInMainWorld('api', api)
+contextBridge.exposeInMainWorld('updater', updater)
 
 export type ElectronAPI = typeof api

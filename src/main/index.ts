@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
+import { initAutoUpdater } from './auto-updater'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -21,6 +22,9 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (!is.dev) {
+      initAutoUpdater(mainWindow)
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
