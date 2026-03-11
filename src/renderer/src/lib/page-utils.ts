@@ -92,10 +92,12 @@ export function addNewPage(fullContent: string, pageName: string): string {
   return trimmed + '\n\n---\n\n' + pageContent
 }
 
-/** Version numbering: Base PRD = v1.00, then v1.1, v1.2, ... */
+/** Version numbering: Base PRD = v1.00, then v1.1 ... v1.9 → v2.0 ... v2.9 → v3.0 */
 export function getPageVersion(pageIndex: number): string {
   if (pageIndex === 0) return 'v1.00'
-  return `v1.${pageIndex}`
+  const major = 1 + Math.floor(pageIndex / 10)
+  const minor = pageIndex % 10
+  return `v${major}.${minor}`
 }
 
 /** Extract the first # heading from a page's body (after the # [PageName] heading) */
