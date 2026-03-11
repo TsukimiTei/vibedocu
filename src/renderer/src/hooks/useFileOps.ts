@@ -3,6 +3,8 @@ import { useDocumentStore } from '@/stores/document-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { useContextStore } from '@/stores/context-store'
+import { usePageStatusStore } from '@/stores/page-status-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import * as fileBridge from '@/services/file-bridge'
 import { NEW_DOC_TEMPLATE } from '@/lib/constants'
 
@@ -19,8 +21,10 @@ export function useFileOps() {
     markSaved()
     addRecentFile(path)
     ;(window as any).__vibedocu_docPath = path
+    useTerminalStore.getState().reset()
     useAgentStore.getState().loadFromFile(path)
     useContextStore.getState().loadFromFile(path)
+    usePageStatusStore.getState().loadFromFile(path)
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
 
@@ -33,8 +37,10 @@ export function useFileOps() {
         markSaved()
         addRecentFile(path)
         ;(window as any).__vibedocu_docPath = path
+        useTerminalStore.getState().reset()
         useAgentStore.getState().loadFromFile(path)
         useContextStore.getState().loadFromFile(path)
+        usePageStatusStore.getState().loadFromFile(path)
       } catch {
         // File no longer exists, remove from recent list
         useSettingsStore.getState().removeRecentFile(path)
@@ -53,8 +59,10 @@ export function useFileOps() {
     setContent(NEW_DOC_TEMPLATE)
     markSaved()
     addRecentFile(path)
+    useTerminalStore.getState().reset()
     useAgentStore.getState().reset()
     useContextStore.getState().reset()
+    usePageStatusStore.getState().reset()
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
 
@@ -90,8 +98,10 @@ export function useFileOps() {
 
   const closeDocument = useCallback(() => {
     reset()
+    useTerminalStore.getState().reset()
     useAgentStore.getState().reset()
     useContextStore.getState().reset()
+    usePageStatusStore.getState().reset()
   }, [reset])
 
   return { openExisting, openRecent, createNew, save, rename, closeDocument }

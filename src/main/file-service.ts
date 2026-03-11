@@ -144,3 +144,29 @@ export async function writeContextData(docPath: string, data: string): Promise<v
   }
   await fsWriteFile(dataPath, data, 'utf-8')
 }
+
+/** Page status persistence */
+function getPageStatusPath(docPath: string): string {
+  const docName = parse(docPath).name
+  const docDir = dirname(docPath)
+  return join(docDir, docName, 'page-status.json')
+}
+
+export async function readPageStatusData(docPath: string): Promise<string | null> {
+  const dataPath = getPageStatusPath(docPath)
+  if (!existsSync(dataPath)) return null
+  try {
+    return await fsReadFile(dataPath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+export async function writePageStatusData(docPath: string, data: string): Promise<void> {
+  const dataPath = getPageStatusPath(docPath)
+  const dir = dirname(dataPath)
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true })
+  }
+  await fsWriteFile(dataPath, data, 'utf-8')
+}

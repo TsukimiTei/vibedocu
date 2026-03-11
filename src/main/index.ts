@@ -1,8 +1,21 @@
+// Suppress EPIPE errors from broken pipes (e.g. console output after stderr closes)
+process.stdout?.on('error', () => {})
+process.stderr?.on('error', () => {})
+
+// Prevent uncaught exceptions from crashing the app
+process.on('uncaughtException', (err) => {
+  console.error('[Main] Uncaught exception:', err)
+})
+process.on('unhandledRejection', (err) => {
+  console.error('[Main] Unhandled rejection:', err)
+})
+
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { initAutoUpdater } from './auto-updater'
+import { destroyAllPtySessions } from './pty-service'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -46,6 +59,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  destroyAllPtySessions()
 })
 
 app.on('window-all-closed', () => {
