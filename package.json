@@ -1,6 +1,6 @@
 {
   "name": "vibedocu",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "VibeDocs - AI-powered vibe coding document assistant",
   "main": "./out/main/index.js",
   "scripts": {
