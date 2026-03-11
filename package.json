@@ -1,6 +1,6 @@
 {
   "name": "vibedocu",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "VibeDocs - AI-powered vibe coding document assistant",
   "main": "./out/main/index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder --publish onTag"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
@@ -24,6 +24,7 @@
     "@milkdown/react": "^7.6.2",
     "@openrouter/ai-sdk-provider": "^0.4.3",
     "ai": "^4.1.0",
+    "electron-updater": "^6.8.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.3"
@@ -43,8 +44,16 @@
   "build": {
     "appId": "com.vibedocu.app",
     "productName": "VibeDocs",
+    "publish": {
+      "provider": "github",
+      "owner": "TsukimiTei",
+      "repo": "vibedocu"
+    },
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools"
     },
