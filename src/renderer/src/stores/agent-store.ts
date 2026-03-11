@@ -116,6 +116,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       if (!raw) return
       const sessions: AgentSession[] = JSON.parse(raw)
       if (!Array.isArray(sessions) || sessions.length === 0) return
+      // Migrate old string[] options to QuestionOption[] format
+      for (const session of sessions) {
+        for (const q of session.questions) {
+          if (q.options) {
+            q.options = q.options.map((o: any) =>
+              typeof o === 'string' ? { text: o } : o
+            )
+          }
+        }
+      }
       // Restore latest session as current view
       const latest = sessions[sessions.length - 1]
       set({

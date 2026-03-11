@@ -8,11 +8,15 @@ import {
   writeAgentData,
   readContextData,
   writeContextData,
-  renameDocument
+  renameDocument,
+  readPageStatusData,
+  writePageStatusData
 } from './file-service'
 import { openFileDialog, chooseDirectoryDialog } from './dialog-service'
 import { checkSyncConflict, syncToVault, syncFileExists, renameSyncedFile } from './sync-service'
 import { scanAllFiles, readFiles } from './context-service'
+import { createPtySession, writeToPty, resizePty, destroyPty } from './pty-service'
+import { sendToExternalTerminal } from './external-terminal'
 import { clipboard } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -125,5 +129,41 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('context:writeData', async (_event, docPath: string, data: string) => {
     return writeContextData(docPath, data)
+  })
+
+  // Page status
+  ipcMain.handle('pageStatus:read', async (_event, docPath: string) => {
+    return readPageStatusData(docPath)
+  })
+
+  ipcMain.handle('pageStatus:write', async (_event, docPath: string, data: string) => {
+    return writePageStatusData(docPath, data)
+  })
+
+  // PTY IPC
+  ipcMain.handle('pty:create', async (event, id: string, cwd: string, cols: number, rows: number) => {
+    try {
+      createPtySession(id, event.sender.id, cwd, cols, rows)
+    } catch (err: any) {
+      console.error('[PTY] Failed to create session:', err.message)
+      throw err
+    }
+  })
+
+  ipcMain.on('pty:write', (_event, id: string, data: string) => {
+    try { writeToPty(id, data) } catch { /* ignore */ }
+  })
+
+  ipcMain.on('pty:resize', (_event, id: string, cols: number, rows: number) => {
+    try { resizePty(id, cols, rows) } catch { /* ignore */ }
+  })
+
+  ipcMain.handle('pty:destroy', async (_event, id: string) => {
+    try { destroyPty(id) } catch { /* ignore */ }
+  })
+
+  // External terminal
+  ipcMain.handle('terminal:sendExternal', async (_event, termApp: string, text: string, cwd?: string) => {
+    return sendToExternalTerminal(termApp as 'terminal' | 'iterm2' | 'ghostty', text, cwd)
   })
 }

@@ -1,9 +1,12 @@
-import { useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { MarkdownEditor } from './MarkdownEditor'
 import { EditorToolbar } from './EditorToolbar'
+import { PageStatusBadge } from './PageStatusBadge'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { usePageStatusStore } from '@/stores/page-status-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
@@ -187,7 +190,9 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
                     </span>
                   </>
                 )}
+                <PageStatusBadge pageName={page.name} />
                 <div className="flex-1 h-px bg-border" />
+                <RunButton filePath={useDocumentStore.getState().filePath} pageName={page.name} pageIndex={i} />
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -229,6 +234,85 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Run button with dropdown for internal/external terminal */
+function RunButton({ filePath, pageName, pageIndex }: {
+  filePath: string | null
+  pageName: string
+  pageIndex: number
+}) {
+  const [showMenu, setShowMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const setStatus = usePageStatusStore((s) => s.setStatus)
+
+  useEffect(() => {
+    if (!showMenu) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMenu])
+
+  const handleRun = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!filePath) return
+    const msg = buildCopyMessage(filePath, pageName, pageIndex)
+    const sessionId = `pty-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`
+    const cwd = filePath.substring(0, filePath.lastIndexOf('/'))
+
+    // Destroy existing session for this page if any
+    const termStore = useTerminalStore.getState()
+    if (termStore.hasSession(pageName)) {
+      termStore.removeSession(pageName)
+    }
+
+    termStore.createSession(pageName, { sessionId, cwd, prompt: msg, pageName })
+    termStore.switchToTerminal()
+    setStatus(pageName, 'running')
+  }
+
+  const handleExternal = (app: string) => {
+    if (!filePath) return
+    const msg = buildCopyMessage(filePath, pageName, pageIndex)
+    const cwd = filePath.substring(0, filePath.lastIndexOf('/'))
+    window.api.terminal.sendExternal(app, msg, cwd)
+    setStatus(pageName, 'running')
+    setShowMenu(false)
+  }
+
+  return (
+    <div className="relative shrink-0">
+      <div className="flex items-center">
+        <button
+          onClick={handleRun}
+          className="text-[11px] text-text-muted hover:text-accent-blue font-mono cursor-pointer transition-colors px-1.5 py-0.5 rounded-l hover:bg-accent-blue/10"
+        >
+          Run
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+          className="text-[11px] text-text-muted hover:text-accent-blue font-mono cursor-pointer transition-colors px-1 py-0.5 rounded-r hover:bg-accent-blue/10 border-l border-border"
+        >
+          ▾
+        </button>
+      </div>
+      {showMenu && (
+        <div ref={menuRef} className="absolute right-0 top-full mt-1 z-50 w-[160px] rounded border border-border bg-bg-primary shadow-xl py-1">
+          <button onClick={() => handleExternal('terminal')} className="w-full text-left px-3 py-1.5 text-[11px] font-mono text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer">
+            Terminal.app
+          </button>
+          <button onClick={() => handleExternal('iterm2')} className="w-full text-left px-3 py-1.5 text-[11px] font-mono text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer">
+            iTerm2
+          </button>
+          <button onClick={() => handleExternal('ghostty')} className="w-full text-left px-3 py-1.5 text-[11px] font-mono text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer">
+            Ghostty
+          </button>
+        </div>
+      )}
     </div>
   )
 }

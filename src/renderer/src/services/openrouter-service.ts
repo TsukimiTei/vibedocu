@@ -5,13 +5,18 @@ import type { AgentResponse } from '@/types/agent'
 import { buildAnalysisPrompt, buildFileSelectionPrompt } from './prompt-builder'
 import type { ImageData } from './prompt-builder'
 
+const optionSchema = z.union([
+  z.string().transform((s) => ({ text: s })),
+  z.object({ text: z.string(), type: z.enum(['select-all']).optional() })
+])
+
 const agentResponseSchema = z.object({
   questions: z.array(
     z.object({
       type: z.enum(['open-ended', 'multiple-choice']),
       text: z.string(),
       category: z.string(),
-      options: z.array(z.string()).optional().nullable()
+      options: z.array(optionSchema).optional().nullable()
     })
   ),
   completeness: z.object({
@@ -38,11 +43,14 @@ function extractAndParseJSON(text: string): AgentResponse {
   if (!parsed.questions || !parsed.completeness) {
     throw new Error('Missing required fields')
   }
-  // Normalize question types
+  // Normalize question types and option format
   parsed.questions = parsed.questions.map((q: Record<string, unknown>) => ({
     ...q,
     type: q.options && Array.isArray(q.options) && q.options.length > 0
-      ? 'multiple-choice' : 'open-ended'
+      ? 'multiple-choice' : 'open-ended',
+    options: Array.isArray(q.options)
+      ? q.options.map((o: unknown) => typeof o === 'string' ? { text: o } : o)
+      : q.options
   }))
   return parsed as AgentResponse
 }

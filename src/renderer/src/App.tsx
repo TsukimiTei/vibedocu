@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { WelcomeScreen } from './components/WelcomeScreen'
-import { AgentPanel } from './components/AgentPanel'
+import { LeftPanel } from './components/LeftPanel'
 import { EditorPanel } from './components/EditorPanel'
 import { SettingsDialog } from './components/SettingsDialog'
 import { OnboardingDialog } from './components/OnboardingDialog'
@@ -87,7 +87,7 @@ export default function App() {
         <div className="flex-1 overflow-hidden">
           <SplitPanel
             left={
-              <AgentPanel
+              <LeftPanel
                 onInsert={handleInsert}
                 onOpenSettings={() => setSettingsOpen(true)}
               />
