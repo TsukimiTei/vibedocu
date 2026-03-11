@@ -4,7 +4,7 @@ import { Dialog } from './ui/Dialog'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { copyToClipboard, syncToVault } from '@/services/file-bridge'
+import { copyToClipboard, syncToVault, syncFileExists, renameSyncedFile } from '@/services/file-bridge'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { toast } from './ui/Toast'
 import { getFileName } from '@/lib/utils'
@@ -14,6 +14,7 @@ interface EditorToolbarProps {
   onUpdate: () => void
   onSave: () => void
   onOpenSettings: () => void
+  onRename: (newName: string) => Promise<{ oldFileName: string } | null>
 }
 
 function formatTime(ts: number | null): string {
@@ -30,7 +31,7 @@ function countWords(text: string): number {
   return chinese + english
 }
 
-export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolbarProps) {
+export function EditorToolbar({ onUpdate, onSave, onOpenSettings, onRename }: EditorToolbarProps) {
   const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, activePageIndex } = useDocumentStore()
   const isLoading = useAgentStore((s) => s.isLoading)
   const sessions = useAgentStore((s) => s.sessions)
@@ -42,6 +43,11 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolba
   const [copied, setCopied] = useState<'msg' | 'path' | false>(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [showConflictDialog, setShowConflictDialog] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [showSyncRenameDialog, setShowSyncRenameDialog] = useState(false)
+  const [pendingSyncRename, setPendingSyncRename] = useState<{ oldFileName: string; newFileName: string } | null>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const messagePanelRef = useRef<HTMLDivElement>(null)
   const detailsPanelRef = useRef<HTMLDivElement>(null)
 
@@ -115,6 +121,62 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolba
     doSync(true)
   }, [doSync])
 
+  const handleStartRename = useCallback(() => {
+    if (!filePath) return
+    const currentName = getFileName(filePath).replace(/\.md$/, '')
+    setRenameValue(currentName)
+    setIsRenaming(true)
+    setTimeout(() => renameInputRef.current?.select(), 0)
+  }, [filePath])
+
+  const handleConfirmRename = useCallback(async () => {
+    const trimmed = renameValue.trim()
+    if (!trimmed || !filePath) {
+      setIsRenaming(false)
+      return
+    }
+    const currentName = getFileName(filePath).replace(/\.md$/, '')
+    if (trimmed === currentName) {
+      setIsRenaming(false)
+      return
+    }
+
+    try {
+      const result = await onRename(trimmed)
+      setIsRenaming(false)
+      if (!result) return
+
+      toast('文档已重命名', 'success')
+
+      // Check if synced file exists in vault
+      const vaultPath = useSettingsStore.getState().obsidianVaultPath
+      if (vaultPath) {
+        const exists = await syncFileExists(vaultPath, result.oldFileName)
+        if (exists) {
+          setPendingSyncRename({ oldFileName: result.oldFileName, newFileName: `${trimmed}.md` })
+          setShowSyncRenameDialog(true)
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast(`重命名失败: ${msg}`, 'error')
+      setIsRenaming(false)
+    }
+  }, [renameValue, filePath, onRename])
+
+  const handleSyncRenameConfirm = useCallback(async () => {
+    if (!pendingSyncRename) return
+    setShowSyncRenameDialog(false)
+    const vaultPath = useSettingsStore.getState().obsidianVaultPath
+    const result = await renameSyncedFile(vaultPath, pendingSyncRename.oldFileName, pendingSyncRename.newFileName)
+    if (result.success) {
+      toast('Vault 中的文件已同步重命名', 'success')
+    } else {
+      toast(`Vault 重命名失败: ${result.error}`, 'error')
+    }
+    setPendingSyncRename(null)
+  }, [pendingSyncRename])
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (showMessagePanel && messagePanelRef.current && !messagePanelRef.current.contains(e.target as Node)) {
@@ -152,9 +214,28 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolba
   return (
     <div className="relative flex items-center justify-between px-4 py-2 border-b border-border bg-bg-primary shrink-0">
       <div className="flex items-center gap-2">
-        <span className="text-[13px] text-text-muted truncate max-w-[200px]">
-          {filePath ? getFileName(filePath) : 'Untitled'}
-        </span>
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleConfirmRename()
+              if (e.key === 'Escape') setIsRenaming(false)
+            }}
+            onBlur={handleConfirmRename}
+            className="text-[13px] text-text-primary bg-bg-secondary border border-border rounded px-1.5 py-0.5 outline-none focus:border-accent-blue max-w-[200px] font-mono"
+            autoFocus
+          />
+        ) : (
+          <span
+            className="text-[13px] text-text-muted truncate max-w-[200px] cursor-pointer hover:text-text-primary transition-colors"
+            onDoubleClick={handleStartRename}
+            title="双击重命名"
+          >
+            {filePath ? getFileName(filePath) : 'Untitled'}
+          </span>
+        )}
         {isDirty && (
           <span className="w-1.5 h-1.5 rounded-full bg-accent-orange" title="Unsaved changes" />
         )}
@@ -268,6 +349,30 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings }: EditorToolba
               onClick={handleConflictOverwrite}
             >
               覆盖
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={showSyncRenameDialog}
+        onClose={() => { setShowSyncRenameDialog(false); setPendingSyncRename(null) }}
+        title="同步重命名"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-text-secondary font-mono leading-relaxed">
+            检测到 Vault 中存在旧文件 <span className="text-text-primary">{pendingSyncRename?.oldFileName}</span>，是否同步重命名为 <span className="text-text-primary">{pendingSyncRename?.newFileName}</span>？
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setShowSyncRenameDialog(false); setPendingSyncRename(null) }}>
+              跳过
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSyncRenameConfirm}
+            >
+              同步重命名
             </Button>
           </div>
         </div>

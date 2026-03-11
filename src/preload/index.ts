@@ -12,7 +12,9 @@ const api = {
     saveImage: (docPath: string, imageBuffer: ArrayBuffer, filename: string): Promise<string> =>
       ipcRenderer.invoke('file:saveImage', docPath, imageBuffer, filename),
     readImage: (imagePath: string): Promise<{ base64: string; mimeType: string } | null> =>
-      ipcRenderer.invoke('file:readImage', imagePath)
+      ipcRenderer.invoke('file:readImage', imagePath),
+    rename: (oldPath: string, newName: string): Promise<{ newPath: string; content: string }> =>
+      ipcRenderer.invoke('file:rename', oldPath, newName)
   },
   clipboard: {
     writeText: (text: string): Promise<boolean> => ipcRenderer.invoke('clipboard:writeText', text)
@@ -35,7 +37,15 @@ const api = {
       vaultPath: string,
       overwrite: boolean
     ): Promise<{ success: boolean; error?: string; conflict?: boolean }> =>
-      ipcRenderer.invoke('sync:toVault', filePath, vaultPath, overwrite)
+      ipcRenderer.invoke('sync:toVault', filePath, vaultPath, overwrite),
+    exists: (vaultPath: string, fileName: string): Promise<boolean> =>
+      ipcRenderer.invoke('sync:exists', vaultPath, fileName),
+    renameSynced: (
+      vaultPath: string,
+      oldFileName: string,
+      newFileName: string
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('sync:renameSynced', vaultPath, oldFileName, newFileName)
   },
   context: {
     scan: (

@@ -104,7 +104,7 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
           value={customInput}
           onChange={(e) => setCustomInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleCustomSubmit()
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleCustomSubmit()
           }}
           placeholder="输入你的答案..."
           className="flex-1 px-3 py-2 rounded border border-border bg-bg-tertiary text-sm text-text-primary outline-none focus:border-accent-blue/50 placeholder:text-text-muted"

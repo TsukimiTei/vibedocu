@@ -30,6 +30,25 @@ export async function readImageFile(
   return api.file.readImage(imagePath)
 }
 
+export async function renameDocument(
+  oldPath: string,
+  newName: string
+): Promise<{ newPath: string; content: string }> {
+  return api.file.rename(oldPath, newName)
+}
+
+export async function syncFileExists(vaultPath: string, fileName: string): Promise<boolean> {
+  return api.sync.exists(vaultPath, fileName)
+}
+
+export async function renameSyncedFile(
+  vaultPath: string,
+  oldFileName: string,
+  newFileName: string
+): Promise<{ success: boolean; error?: string }> {
+  return api.sync.renameSynced(vaultPath, oldFileName, newFileName)
+}
+
 export async function copyToClipboard(text: string): Promise<void> {
   await api.clipboard.writeText(text)
 }

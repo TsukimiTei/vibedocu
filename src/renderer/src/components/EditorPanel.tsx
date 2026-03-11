@@ -13,10 +13,11 @@ interface EditorPanelProps {
   activeEditorRef: React.MutableRefObject<EditorHandle | null>
   onUpdate: () => void
   onSave: () => void
+  onRename: (newName: string) => Promise<{ oldFileName: string } | null>
   onOpenSettings: () => void
 }
 
-export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings }: EditorPanelProps) {
+export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpenSettings }: EditorPanelProps) {
   const { content, activePageIndex, setContent, markDirty, setActivePageIndex } = useDocumentStore()
   const pageOrderReversed = useSettingsStore((s) => s.pageOrderReversed)
   const editorRefs = useRef<Map<number, EditorHandle>>(new Map())
@@ -149,7 +150,7 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onOpenSettings 
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
-      <EditorToolbar onUpdate={onUpdate} onSave={onSave} onOpenSettings={onOpenSettings} />
+      <EditorToolbar onUpdate={onUpdate} onSave={onSave} onRename={onRename} onOpenSettings={onOpenSettings} />
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         {/* New Page Button (top when reversed) */}
         {pageOrderReversed && (

@@ -1,7 +1,8 @@
 import {
   readFile as fsReadFile,
   writeFile as fsWriteFile,
-  copyFile
+  copyFile,
+  rename as fsRename
 } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname, basename } from 'path'
@@ -16,6 +17,32 @@ export async function checkSyncConflict(filePath: string, vaultPath: string): Pr
   const fileName = basename(filePath)
   const destPath = join(vaultPath, fileName)
   return existsSync(destPath)
+}
+
+export function syncFileExists(vaultPath: string, fileName: string): boolean {
+  return existsSync(join(vaultPath, fileName))
+}
+
+export async function renameSyncedFile(
+  vaultPath: string,
+  oldFileName: string,
+  newFileName: string
+): Promise<SyncResult> {
+  try {
+    const oldPath = join(vaultPath, oldFileName)
+    const newPath = join(vaultPath, newFileName)
+    if (!existsSync(oldPath)) {
+      return { success: false, error: 'Vault 中不存在旧文件' }
+    }
+    if (existsSync(newPath)) {
+      return { success: false, error: `Vault 中已存在 ${newFileName}` }
+    }
+    await fsRename(oldPath, newPath)
+    return { success: true }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { success: false, error: message }
+  }
 }
 
 export async function syncToVault(

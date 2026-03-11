@@ -33,6 +33,7 @@ interface SettingsStore {
   removeRecentFile: (filePath: string) => void
   setObsidianVaultPath: (path: string) => void
   togglePageOrder: () => void
+  updateRecentFile: (oldPath: string, newPath: string) => void
 }
 
 function applyTheme(theme: ThemeId) {
@@ -66,6 +67,10 @@ export const useSettingsStore = create<SettingsStore>()(
       removeRecentFile: (filePath) =>
         set((state) => ({
           recentFiles: state.recentFiles.filter((f) => f !== filePath)
+        })),
+      updateRecentFile: (oldPath, newPath) =>
+        set((state) => ({
+          recentFiles: state.recentFiles.map((f) => (f === oldPath ? newPath : f))
         }))
     }),
     {

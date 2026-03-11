@@ -43,10 +43,11 @@ export function useFileOps() {
     [setFilePath, setContent, markSaved, addRecentFile]
   )
 
-  const createNew = useCallback(async () => {
+  const createNew = useCallback(async (fileName?: string) => {
     const dir = await fileBridge.chooseDirectory()
     if (!dir) return false
-    const path = `${dir}/requirements.md`
+    const name = fileName || 'requirements'
+    const path = `${dir}/${name}.md`
     await fileBridge.writeFile(path, NEW_DOC_TEMPLATE)
     setFilePath(path)
     setContent(NEW_DOC_TEMPLATE)
@@ -63,11 +64,35 @@ export function useFileOps() {
     markSaved()
   }, [filePath, content, markSaved])
 
+  const rename = useCallback(async (newName: string): Promise<{ oldFileName: string } | null> => {
+    if (!filePath) return null
+
+    const oldFileName = filePath.split('/').pop() || ''
+
+    // Save current content before rename
+    const currentContent = useDocumentStore.getState().content
+    if (useDocumentStore.getState().isDirty) {
+      await fileBridge.writeFile(filePath, currentContent)
+    }
+
+    const { newPath, content: updatedContent } = await fileBridge.renameDocument(filePath, newName)
+
+    setFilePath(newPath)
+    setContent(updatedContent)
+    markSaved()
+
+    // Update recent files & global doc path
+    useSettingsStore.getState().updateRecentFile(filePath, newPath)
+    ;(window as any).__vibedocu_docPath = newPath
+
+    return { oldFileName }
+  }, [filePath, setFilePath, setContent, markSaved])
+
   const closeDocument = useCallback(() => {
     reset()
     useAgentStore.getState().reset()
     useContextStore.getState().reset()
   }, [reset])
 
-  return { openExisting, openRecent, createNew, save, closeDocument }
+  return { openExisting, openRecent, createNew, save, rename, closeDocument }
 }

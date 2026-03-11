@@ -110,7 +110,7 @@ export function PageTabBar() {
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleConfirmRename()
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleConfirmRename()
                   if (e.key === 'Escape') {
                     setEditingIndex(null)
                     setEditName('')

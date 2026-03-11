@@ -7,10 +7,11 @@ import {
   readAgentData,
   writeAgentData,
   readContextData,
-  writeContextData
+  writeContextData,
+  renameDocument
 } from './file-service'
 import { openFileDialog, chooseDirectoryDialog } from './dialog-service'
-import { checkSyncConflict, syncToVault } from './sync-service'
+import { checkSyncConflict, syncToVault, syncFileExists, renameSyncedFile } from './sync-service'
 import { scanAllFiles, readFiles } from './context-service'
 import { clipboard } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
@@ -64,6 +65,10 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle('file:rename', async (_event, oldPath: string, newName: string) => {
+    return renameDocument(oldPath, newName)
+  })
+
   ipcMain.handle('clipboard:writeText', async (_event, text: string) => {
     clipboard.writeText(text)
     return true
@@ -85,6 +90,17 @@ export function registerIpcHandlers(): void {
     'sync:toVault',
     async (_event, filePath: string, vaultPath: string, overwrite: boolean) => {
       return syncToVault(filePath, vaultPath, overwrite)
+    }
+  )
+
+  ipcMain.handle('sync:exists', async (_event, vaultPath: string, fileName: string) => {
+    return syncFileExists(vaultPath, fileName)
+  })
+
+  ipcMain.handle(
+    'sync:renameSynced',
+    async (_event, vaultPath: string, oldFileName: string, newFileName: string) => {
+      return renameSyncedFile(vaultPath, oldFileName, newFileName)
     }
   )
 

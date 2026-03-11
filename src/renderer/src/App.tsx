@@ -20,7 +20,7 @@ export default function App() {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
-  const { save, openExisting, createNew } = useFileOps()
+  const { save, openExisting, createNew, rename } = useFileOps()
   const { runAnalysis } = useAgent()
   const activeEditorRef = useRef<EditorHandle | null>(null)
 
@@ -95,6 +95,7 @@ export default function App() {
                 activeEditorRef={activeEditorRef}
                 onUpdate={runAnalysis}
                 onSave={save}
+                onRename={rename}
                 onOpenSettings={() => setSettingsOpen(true)}
               />
             }

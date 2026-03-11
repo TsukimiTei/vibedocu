@@ -1,4 +1,4 @@
-import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir } from 'fs/promises'
+import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, rename as fsRename, unlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname, join, parse, extname } from 'path'
 
@@ -55,6 +55,42 @@ export async function readImageAsBase64(
   } catch {
     return null
   }
+}
+
+/** Rename a document and its associated data directory */
+export async function renameDocument(
+  oldPath: string,
+  newName: string // base name without .md extension
+): Promise<{ newPath: string; content: string }> {
+  const dir = dirname(oldPath)
+  const oldName = parse(oldPath).name
+  const newPath = join(dir, `${newName}.md`)
+
+  if (oldPath === newPath) {
+    const content = await fsReadFile(oldPath, 'utf-8')
+    return { newPath: oldPath, content }
+  }
+
+  if (existsSync(newPath)) {
+    throw new Error(`文件 ${newName}.md 已存在`)
+  }
+
+  // Read content and update image/asset path references
+  let content = await fsReadFile(oldPath, 'utf-8')
+  content = content.split(`./${oldName}/`).join(`./${newName}/`)
+
+  // Rename data directory if it exists
+  const oldDataDir = join(dir, oldName)
+  const newDataDir = join(dir, newName)
+  if (existsSync(oldDataDir)) {
+    await fsRename(oldDataDir, newDataDir)
+  }
+
+  // Write new file then delete old
+  await fsWriteFile(newPath, content, 'utf-8')
+  await unlink(oldPath)
+
+  return { newPath, content }
 }
 
 /** Get the path for agent session data file associated with a document */
