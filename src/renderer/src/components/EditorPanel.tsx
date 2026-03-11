@@ -262,7 +262,8 @@ function RunButton({ filePath, pageName, pageIndex }: {
     if (!filePath) return
     const msg = buildCopyMessage(filePath, pageName, pageIndex)
     const sessionId = `pty-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`
-    const cwd = filePath.substring(0, filePath.lastIndexOf('/'))
+    const projectDir = useSettingsStore.getState().projectDir
+    const cwd = projectDir || filePath.substring(0, filePath.lastIndexOf('/'))
 
     // Destroy existing session for this page if any
     const termStore = useTerminalStore.getState()
@@ -278,7 +279,8 @@ function RunButton({ filePath, pageName, pageIndex }: {
   const handleExternal = (app: string) => {
     if (!filePath) return
     const msg = buildCopyMessage(filePath, pageName, pageIndex)
-    const cwd = filePath.substring(0, filePath.lastIndexOf('/'))
+    const projectDir = useSettingsStore.getState().projectDir
+    const cwd = projectDir || filePath.substring(0, filePath.lastIndexOf('/'))
     window.api.terminal.sendExternal(app, msg, cwd)
     setStatus(pageName, 'running')
     setShowMenu(false)
