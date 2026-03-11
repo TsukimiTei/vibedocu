@@ -17,7 +17,7 @@ const themes: { id: ThemeId; name: string; preview: string }[] = [
 ]
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
-  const { apiKey, setApiKey, theme, setTheme, obsidianVaultPath, setObsidianVaultPath } = useSettingsStore()
+  const { apiKey, setApiKey, theme, setTheme, obsidianVaultPath, setObsidianVaultPath, projectDir, setProjectDir } = useSettingsStore()
   const [tempKey, setTempKey] = useState(apiKey)
 
   const handleSave = () => {
@@ -28,6 +28,11 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const handleChooseVault = async () => {
     const dir = await chooseDirectory()
     if (dir) setObsidianVaultPath(dir)
+  }
+
+  const handleChooseProjectDir = async () => {
+    const dir = await chooseDirectory()
+    if (dir) setProjectDir(dir)
   }
 
   return (
@@ -50,6 +55,28 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </div>
 
         <ModelSelector />
+
+        <div>
+          <label className="block text-xs text-text-muted mb-1.5">
+            项目目录
+          </label>
+          <div className="flex gap-2">
+            <div className="flex-1 bg-bg-tertiary border border-border rounded px-3 py-2 text-xs text-text-secondary font-mono truncate min-h-[34px] flex items-center">
+              {projectDir || '未配置'}
+            </div>
+            <Button size="sm" variant="ghost" onClick={handleChooseProjectDir}>
+              选择
+            </Button>
+            {projectDir && (
+              <Button size="sm" variant="ghost" onClick={() => setProjectDir('')}>
+                清除
+              </Button>
+            )}
+          </div>
+          <p className="text-[10px] text-text-muted mt-1">
+            Terminal Run 的工作目录，与文档路径独立
+          </p>
+        </div>
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">

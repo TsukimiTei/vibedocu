@@ -23,6 +23,7 @@ interface SettingsStore {
   hasSeenOnboarding: boolean
   recentFiles: string[]
   obsidianVaultPath: string
+  projectDir: string
   pageOrderReversed: boolean
 
   setApiKey: (key: string) => void
@@ -32,6 +33,7 @@ interface SettingsStore {
   addRecentFile: (filePath: string) => void
   removeRecentFile: (filePath: string) => void
   setObsidianVaultPath: (path: string) => void
+  setProjectDir: (path: string) => void
   togglePageOrder: () => void
   updateRecentFile: (oldPath: string, newPath: string) => void
 }
@@ -49,12 +51,14 @@ export const useSettingsStore = create<SettingsStore>()(
       hasSeenOnboarding: false,
       recentFiles: [],
       obsidianVaultPath: '',
+      projectDir: '',
       pageOrderReversed: true,
 
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
       markOnboardingSeen: () => set({ hasSeenOnboarding: true }),
       setObsidianVaultPath: (path) => set({ obsidianVaultPath: path }),
+      setProjectDir: (path) => set({ projectDir: path }),
       togglePageOrder: () => set((state) => ({ pageOrderReversed: !state.pageOrderReversed })),
       setTheme: (theme) => {
         applyTheme(theme)
