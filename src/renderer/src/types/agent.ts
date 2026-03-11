@@ -1,9 +1,14 @@
+export interface QuestionOption {
+  text: string
+  type?: 'select-all'
+}
+
 export interface Question {
   id: string
   type: 'open-ended' | 'multiple-choice'
   text: string
   category: string
-  options?: string[]
+  options?: QuestionOption[]
   answered: boolean
   answer?: string
 }

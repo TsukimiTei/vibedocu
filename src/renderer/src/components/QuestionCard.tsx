@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Question } from '@/types/agent'
+import type { Question, QuestionOption } from '@/types/agent'
 import { Card } from './ui/Card'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
@@ -20,6 +20,24 @@ const categoryColors: Record<string, string> = {
   'Success Metrics': 'text-accent-green'
 }
 
+const SELECT_ALL_PATTERNS = /以上都要|以上全部|全部都要|都要|all of the above/i
+
+function getOptionText(opt: QuestionOption | string): string {
+  return typeof opt === 'string' ? opt : opt.text
+}
+
+function isSelectAll(opt: QuestionOption | string): boolean {
+  if (typeof opt === 'string') return SELECT_ALL_PATTERNS.test(opt)
+  return opt.type === 'select-all' || SELECT_ALL_PATTERNS.test(opt.text)
+}
+
+function buildSelectAllAnswer(options: (QuestionOption | string)[], selectedText: string): string {
+  const otherTexts = options
+    .filter((o) => !isSelectAll(o))
+    .map(getOptionText)
+  return `${selectedText}（包括：${otherTexts.join('、')}）`
+}
+
 export function QuestionCard({ question, onInsert }: QuestionCardProps) {
   const [customInput, setCustomInput] = useState('')
 
@@ -28,14 +46,28 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
     onInsert(text)
   }
 
+  const handleOptionClick = (option: QuestionOption | string) => {
+    const optText = getOptionText(option)
+    if (isSelectAll(option) && question.options) {
+      insertQA(buildSelectAllAnswer(question.options, optText))
+    } else {
+      insertQA(optText)
+    }
+  }
+
   const handleInsertQuestion = () => {
     const text = `\n\n**Q: ${question.text}**\n\nA: `
     onInsert(text)
   }
 
   const handleCustomSubmit = () => {
-    if (!customInput.trim()) return
-    insertQA(customInput.trim())
+    const trimmed = customInput.trim()
+    if (!trimmed) return
+    if (SELECT_ALL_PATTERNS.test(trimmed) && question.options) {
+      insertQA(buildSelectAllAnswer(question.options, trimmed))
+    } else {
+      insertQA(trimmed)
+    }
     setCustomInput('')
   }
 
@@ -87,15 +119,24 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
 
       {question.type === 'multiple-choice' && question.options && (
         <div className="space-y-2 mb-4">
-          {question.options.map((option, i) => (
-            <button
-              key={i}
-              onClick={() => insertQA(option)}
-              className="w-full text-left px-3 py-2 rounded border border-border text-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue/30 transition-colors cursor-pointer"
-            >
-              {option}
-            </button>
-          ))}
+          {question.options.map((option, i) => {
+            const optText = getOptionText(option)
+            const selectAll = isSelectAll(option)
+            return (
+              <button
+                key={i}
+                onClick={() => handleOptionClick(option)}
+                className={cn(
+                  'w-full text-left px-3 py-2 rounded border text-sm transition-colors cursor-pointer',
+                  selectAll
+                    ? 'border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50'
+                    : 'border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue/30'
+                )}
+              >
+                {optText}
+              </button>
+            )
+          })}
         </div>
       )}
 
