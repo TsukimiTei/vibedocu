@@ -112,7 +112,8 @@ export function TerminalView({ sessionId, cwd, prompt, pageName, onExit }: Termi
       unsubData?.()
       unsubExit?.()
       resizeObserver?.disconnect()
-      window.api.pty.destroy(sessionId)
+      // PTY is NOT destroyed here — it stays alive across page switches.
+      // PTY destruction is handled by terminal-store's removeSession/reset.
       term.dispose()
     }
   }, [])
