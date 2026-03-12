@@ -434,26 +434,9 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
       <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">{question.text}</h3>
 
       <div className="flex gap-2 mb-4">
-        {isMultipleChoice && (
-          <button
-            onClick={handleExplain}
-            disabled={explaining}
-            className={cn(
-              'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
-              explaining
-                ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
-                : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
-            )}
-          >
-            {explaining ? '> 分析中...' : '> 解释选项'}
-          </button>
-        )}
         <button
           onClick={handleInsertQuestion}
-          className={cn(
-            'px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono',
-            isMultipleChoice ? 'flex-1' : 'w-full'
-          )}
+          className="w-full px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono"
         >
           &gt; 添加到文档 _
         </button>
