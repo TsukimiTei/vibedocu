@@ -3,6 +3,7 @@ import { Dialog } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { ModelSelector } from './ModelSelector'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useDocumentStore } from '@/stores/document-store'
 import { chooseDirectory } from '@/services/file-bridge'
 import type { ThemeId } from '@/types/settings'
 
@@ -32,7 +33,14 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
   const handleChooseProjectDir = async () => {
     const dir = await chooseDirectory()
-    if (dir) setProjectDir(dir)
+    if (dir) {
+      setProjectDir(dir)
+      // Bind to current document if one is open
+      const docPath = useDocumentStore.getState().filePath
+      if (docPath) {
+        useSettingsStore.getState().bindProjectDir(docPath, dir)
+      }
+    }
   }
 
   return (
@@ -74,7 +82,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             )}
           </div>
           <p className="text-[10px] text-text-muted mt-1">
-            Terminal Run 的工作目录，与文档路径独立
+            Agent 读取项目 context 的目录，与文档路径独立
           </p>
         </div>
 

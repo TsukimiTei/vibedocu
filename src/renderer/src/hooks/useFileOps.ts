@@ -8,6 +8,17 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import * as fileBridge from '@/services/file-bridge'
 import { NEW_DOC_TEMPLATE } from '@/lib/constants'
 
+/** Restore a previously bound project dir for this doc, or bind the current projectDir to it. */
+function syncProjectDirBinding(docPath: string): void {
+  const settings = useSettingsStore.getState()
+  const boundDir = settings.docProjectDirs[docPath]
+  if (boundDir) {
+    settings.setProjectDir(boundDir)
+  } else if (settings.projectDir) {
+    settings.bindProjectDir(docPath, settings.projectDir)
+  }
+}
+
 export function useFileOps() {
   const { filePath, content, setFilePath, setContent, markSaved, reset } = useDocumentStore()
   const { addRecentFile } = useSettingsStore()
@@ -25,6 +36,7 @@ export function useFileOps() {
     useAgentStore.getState().loadFromFile(path)
     useContextStore.getState().loadFromFile(path)
     usePageStatusStore.getState().loadFromFile(path)
+    syncProjectDirBinding(path)
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
 
@@ -41,6 +53,7 @@ export function useFileOps() {
         useAgentStore.getState().loadFromFile(path)
         useContextStore.getState().loadFromFile(path)
         usePageStatusStore.getState().loadFromFile(path)
+        syncProjectDirBinding(path)
       } catch {
         // File no longer exists, remove from recent list
         useSettingsStore.getState().removeRecentFile(path)
@@ -63,6 +76,7 @@ export function useFileOps() {
     useAgentStore.getState().reset()
     useContextStore.getState().reset()
     usePageStatusStore.getState().reset()
+    syncProjectDirBinding(path)
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
 
