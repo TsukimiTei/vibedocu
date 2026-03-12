@@ -17,6 +17,7 @@ import { checkSyncConflict, syncToVault, syncFileExists, renameSyncedFile } from
 import { scanAllFiles, readFiles } from './context-service'
 import { createPtySession, writeToPty, resizePty, destroyPty } from './pty-service'
 import { sendToExternalTerminal } from './external-terminal'
+import { createWorktree } from './git-service'
 import { clipboard } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -165,5 +166,10 @@ export function registerIpcHandlers(): void {
   // External terminal
   ipcMain.handle('terminal:sendExternal', async (_event, termApp: string, text: string, cwd?: string) => {
     return sendToExternalTerminal(termApp as 'terminal' | 'iterm2' | 'ghostty', text, cwd)
+  })
+
+  // Git operations
+  ipcMain.handle('git:createWorktree', async (_event, projectDir: string, branchName: string) => {
+    return createWorktree(projectDir, branchName)
   })
 }

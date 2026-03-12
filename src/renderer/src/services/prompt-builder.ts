@@ -77,6 +77,40 @@ export function buildAnalysisPrompt(
   }
 }
 
+export function buildPartialAnalysisPrompt(
+  selectedText: string,
+  fullPageContent: string,
+  customQuestion?: string,
+  basePrdContext?: string | null
+): {
+  system: string
+  userContent: UserContentPart[]
+} {
+  let systemPrompt = SYSTEM_PROMPT
+
+  systemPrompt +=
+    '\n\n用户选中了文档中的一段文字，请针对这段选中内容进行分析和提问。'
+
+  let textPrompt = ''
+
+  if (basePrdContext) {
+    textPrompt += `Here is the base PRD for context:\n\n---\n\n${basePrdContext}\n\n---\n\n`
+  }
+
+  textPrompt += `Full page content for reference:\n\n---\n\n${fullPageContent}\n\n---\n\n`
+  textPrompt += `Selected text to analyze:\n\n---\n\n${selectedText}\n\n---\n\n`
+
+  if (customQuestion) {
+    textPrompt += `User's specific question about this selection: ${customQuestion}\n\n`
+  }
+
+  textPrompt += 'Return ONLY a valid JSON object.'
+
+  const userContent: UserContentPart[] = [{ type: 'text', text: textPrompt }]
+
+  return { system: systemPrompt, userContent }
+}
+
 export function buildFileSelectionPrompt(
   markdown: string,
   fileManifest: string[]
@@ -108,3 +142,4 @@ Only implement the requirements from the "${pageName}" page.`
 
 Please read this file and implement the project based on the "Base PRD" section (the content before the first \`---\` page break). Ignore any subsequent feature pages.`
 }
+

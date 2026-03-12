@@ -133,6 +133,24 @@ export function extractImages(markdown: string): ExtractedImage[] {
   return images
 }
 
+/**
+ * Convert a page title to a git branch name.
+ * Removes non-ASCII chars (CJK etc.), lowercases, replaces spaces with hyphens.
+ * Returns `feature/<slug>`.
+ */
+export function slugifyToBranchName(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^\x20-\x7E]/g, ' ')  // non-ASCII → space
+    .replace(/[^a-z0-9\s-]/g, '')   // keep alphanumeric, spaces, hyphens
+    .trim()
+    .replace(/\s+/g, '-')           // spaces → hyphens
+    .replace(/-+/g, '-')            // collapse hyphens
+    .replace(/^-|-$/g, '')          // trim leading/trailing hyphens
+
+  return `feature/${slug || 'unnamed'}`
+}
+
 export function renamePage(fullContent: string, pageIndex: number, newName: string): string {
   const pages = parsePages(fullContent)
   if (pageIndex <= 0 || !pages[pageIndex]) return fullContent

@@ -77,6 +77,13 @@ const api = {
       return () => ipcRenderer.removeListener('pty:exit', handler)
     }
   },
+  git: {
+    createWorktree: (
+      projectDir: string,
+      branchName: string
+    ): Promise<{ success: boolean; worktreePath?: string; branchName?: string; error?: string }> =>
+      ipcRenderer.invoke('git:createWorktree', projectDir, branchName)
+  },
   context: {
     scan: (
       projectDir: string,
