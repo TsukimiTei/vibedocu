@@ -3,7 +3,7 @@ import { useAgentStore } from '@/stores/agent-store'
 import { useDocumentStore } from '@/stores/document-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useContextStore } from '@/stores/context-store'
-import { analyzeDocument, selectRelevantFiles } from '@/services/openrouter-service'
+import { analyzeDocument, analyzeSelectedText, selectRelevantFiles } from '@/services/openrouter-service'
 import {
   scanProjectFiles,
   readContextFiles,
@@ -269,5 +269,34 @@ export function useAgent() {
     }
   }, [apiKey, model])
 
-  return { runAnalysis, refreshContext, isLoading }
+  const runPartialAnalysis = useCallback(async (selectedText: string, customQuestion?: string) => {
+    if (!apiKey) {
+      setError('Please set your OpenRouter API key in settings')
+      return
+    }
+
+    const { content, activePageIndex } = useDocumentStore.getState()
+    const pageContent = getPageContent(content, activePageIndex)
+    const basePrdContext = activePageIndex > 0 ? getPageContent(content, 0) : null
+
+    if (!selectedText.trim()) return
+
+    setLoading(true)
+    try {
+      const response = await analyzeSelectedText(
+        selectedText,
+        pageContent,
+        model,
+        apiKey,
+        customQuestion,
+        basePrdContext
+      )
+      addSession(response.questions, response.completeness, activePageIndex)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to analyze selected text'
+      setError(message)
+    }
+  }, [apiKey, model, setLoading, setError, addSession])
+
+  return { runAnalysis, runPartialAnalysis, refreshContext, isLoading }
 }
