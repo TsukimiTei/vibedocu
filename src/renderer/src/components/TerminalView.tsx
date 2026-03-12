@@ -97,11 +97,10 @@ export function TerminalView({ sessionId, cwd, prompt, pageName, onExit }: Termi
         })
         resizeObserver.observe(containerRef.current!)
 
-        // Auto-send the claude command with prompt
+        // Pre-fill the command in terminal (user presses Enter to execute)
         setTimeout(() => {
           if (!disposed) {
-            const escapedPrompt = prompt.replace(/'/g, "'\\''")
-            window.api.pty.write(sessionId, `claude '${escapedPrompt}'\n`)
+            window.api.pty.write(sessionId, prompt)
           }
         }, 500)
       })()

@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { usePageStatusStore } from '@/stores/page-status-store'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useAgent } from '@/hooks/useAgent'
-import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion } from '@/lib/page-utils'
+import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion, slugifyToBranchName } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
 import type { EditorHandle } from '@/hooks/useEditor'
@@ -256,6 +256,7 @@ function RunButton({ filePath, pageName, pageIndex }: {
   pageIndex: number
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const setStatus = usePageStatusStore((s) => s.setStatus)
 
@@ -268,30 +269,63 @@ function RunButton({ filePath, pageName, pageIndex }: {
     return () => document.removeEventListener('mousedown', handler)
   }, [showMenu])
 
-  const handleRun = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!filePath) return
-    const msg = buildCopyMessage(filePath, pageName, pageIndex)
-    const sessionId = `pty-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`
+  const getCwd = () => {
     const projectDir = useSettingsStore.getState().projectDir
-    const cwd = projectDir || filePath.substring(0, filePath.lastIndexOf('/'))
+    return projectDir || filePath!.substring(0, filePath!.lastIndexOf('/'))
+  }
 
-    // Destroy existing session for this page if any
-    const termStore = useTerminalStore.getState()
-    if (termStore.hasSession(pageName)) {
-      termStore.removeSession(pageName)
+  const handleRun = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!filePath || isCreating) return
+
+    setIsCreating(true)
+    try {
+      const docContent = useDocumentStore.getState().content
+      const pageTitle = getPageTitle(docContent, pageIndex)
+      const asciiTitle = (pageTitle || '').replace(/[^\x20-\x7E]/g, '').trim()
+      const branchName = slugifyToBranchName(asciiTitle || pageName)
+      const cwd = getCwd()
+
+      // Build claude command
+      const msg = buildCopyMessage(filePath, pageName, pageIndex)
+      const escapedMsg = msg.replace(/'/g, "'\\''")
+
+      setStatus(pageName, 'running')
+
+      // Create worktree with feature branch (fetch + branch from origin/main)
+      const result = await window.api.git.createWorktree(cwd, branchName)
+
+      let termCwd: string
+      let cmd: string
+
+      if (result.success) {
+        termCwd = result.worktreePath!
+        cmd = `claude '${escapedMsg}'`
+      } else {
+        // Fallback: open in original dir, show error as shell comment
+        termCwd = cwd
+        const errorClean = (result.error || 'Unknown error').replace(/[`$"'\\\n\r\t]/g, '')
+        cmd = `# Worktree failed: ${errorClean}\nclaude '${escapedMsg}'`
+        setStatus(pageName, 'failed')
+      }
+
+      const sessionId = `pty-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`
+      const termStore = useTerminalStore.getState()
+      if (termStore.hasSession(pageName)) {
+        termStore.removeSession(pageName)
+      }
+
+      termStore.createSession(pageName, { sessionId, cwd: termCwd, prompt: cmd, pageName })
+      termStore.switchToTerminal()
+    } finally {
+      setIsCreating(false)
     }
-
-    termStore.createSession(pageName, { sessionId, cwd, prompt: msg, pageName })
-    termStore.switchToTerminal()
-    setStatus(pageName, 'running')
   }
 
   const handleExternal = (app: string) => {
     if (!filePath) return
     const msg = buildCopyMessage(filePath, pageName, pageIndex)
-    const projectDir = useSettingsStore.getState().projectDir
-    const cwd = projectDir || filePath.substring(0, filePath.lastIndexOf('/'))
+    const cwd = getCwd()
     window.api.terminal.sendExternal(app, msg, cwd)
     setStatus(pageName, 'running')
     setShowMenu(false)
@@ -302,9 +336,14 @@ function RunButton({ filePath, pageName, pageIndex }: {
       <div className="flex items-center">
         <button
           onClick={handleRun}
-          className="text-[11px] text-text-muted hover:text-accent-blue font-mono cursor-pointer transition-colors px-1.5 py-0.5 rounded-l hover:bg-accent-blue/10"
+          disabled={isCreating}
+          className={`text-[11px] font-mono transition-colors px-1.5 py-0.5 rounded-l ${
+            isCreating
+              ? 'text-text-muted/50 cursor-wait'
+              : 'text-text-muted hover:text-accent-blue cursor-pointer hover:bg-accent-blue/10'
+          }`}
         >
-          Run
+          {isCreating ? 'Creating…' : 'Run'}
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
