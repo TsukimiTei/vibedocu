@@ -5,12 +5,15 @@ import { AgentPanel } from './AgentPanel'
 import { TerminalView } from './TerminalView'
 import { parsePages } from '@/lib/page-utils'
 
+import type { UpdateDocumentAnswerFn } from '@/lib/qa-utils'
+
 interface LeftPanelProps {
   onInsert: (text: string) => void
   onOpenSettings: () => void
+  onUpdateDocumentAnswer?: UpdateDocumentAnswerFn
 }
 
-export function LeftPanel({ onInsert, onOpenSettings }: LeftPanelProps) {
+export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: LeftPanelProps) {
   const activeTab = useTerminalStore((s) => s.activeTab)
   const switchToAsk = useTerminalStore((s) => s.switchToAsk)
   const switchToTerminal = useTerminalStore((s) => s.switchToTerminal)
@@ -66,7 +69,7 @@ export function LeftPanel({ onInsert, onOpenSettings }: LeftPanelProps) {
       {/* Content — all panels always mounted, toggled via CSS to preserve state */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
         <div className={`h-full ${activeTab === 'ask' ? '' : 'hidden'}`}>
-          <AgentPanel onInsert={onInsert} onOpenSettings={onOpenSettings} />
+          <AgentPanel onInsert={onInsert} onOpenSettings={onOpenSettings} onUpdateDocumentAnswer={onUpdateDocumentAnswer} />
         </div>
 
         <div className={`h-full flex flex-col ${activeTab === 'terminal' ? '' : 'hidden'}`}>
