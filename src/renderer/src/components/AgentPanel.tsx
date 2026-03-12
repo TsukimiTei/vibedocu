@@ -7,7 +7,7 @@ import { QuestionCard } from './QuestionCard'
 import type { UpdateDocumentAnswerFn } from '@/lib/qa-utils'
 import { Button } from './ui/Button'
 import { useAgent } from '@/hooks/useAgent'
-import { parsePages } from '@/lib/page-utils'
+import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 interface AgentPanelProps {
   onInsert: (text: string) => void
@@ -81,6 +81,8 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
 
   const pages = parsePages(content)
   const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
+  const currentPageTitle = getPageTitle(content, activePageIndex)
+  const currentPageLabel = formatPageLabel(activePageIndex, currentPageTitle, currentPageName)
   const pageSessions = sessions.filter((s) => s.pageIndex === activePageIndex)
 
   return (
@@ -91,7 +93,7 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
             Agent
           </span>
           <span className="text-[13px] text-text-muted px-2 py-0.5 rounded bg-bg-secondary">
-            {currentPageName}
+            {currentPageLabel}
           </span>
         </div>
         <div className="flex gap-1.5">
@@ -152,10 +154,12 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
           </div>
         )}
 
-        {currentQuestions.map((q) => (
+        {currentQuestions.map((q, idx) => (
           <QuestionCard
             key={q.id}
             question={q}
+            index={idx + 1}
+            total={currentQuestions.length}
             onInsert={(text) => {
               onInsert(text)
               useAgentStore.getState().markAnswered(q.id, text)

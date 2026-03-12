@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
-import { parsePages, addNewPage, renamePage } from '@/lib/page-utils'
+import { parsePages, addNewPage, renamePage, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 export function PageTabBar() {
   const { content, currentPageIndex, setCurrentPageIndex, setContent, markDirty } = useDocumentStore()
@@ -127,7 +127,7 @@ export function PageTabBar() {
               onDoubleClick={() => handleStartRename(i)}
               className={tabClass(i === currentPageIndex)}
             >
-              {page.name}
+              {formatPageLabel(i, getPageTitle(content, i), page.name)}
               {i < 9 && (
                 <span className={`text-[10px] ${i === currentPageIndex ? 'text-text-muted' : 'text-text-muted/50'}`}>
                   ⌘{i + 1}

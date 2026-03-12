@@ -107,6 +107,25 @@ export function getPageTitle(fullContent: string, pageIndex: number): string {
   return match ? match[1].trim() : ''
 }
 
+const MAX_DISPLAY_TITLE_LENGTH = 15
+
+/**
+ * Format a page's display label in the "ftN.功能名" format.
+ * - Base PRD (index 0): returns 'Base PRD'
+ * - Feature pages with a heading1 title: returns "ft{index}.{title}" (truncated at 15 chars)
+ * - Feature pages without title: falls back to the original page name (e.g. "Feature 1")
+ */
+export function formatPageLabel(pageIndex: number, pageTitle: string, fallbackName: string): string {
+  if (pageIndex === 0) return 'Base PRD'
+  if (pageTitle) {
+    const truncated = pageTitle.length > MAX_DISPLAY_TITLE_LENGTH
+      ? pageTitle.slice(0, MAX_DISPLAY_TITLE_LENGTH) + '…'
+      : pageTitle
+    return `ft${pageIndex}.${truncated}`
+  }
+  return fallbackName
+}
+
 export interface ExtractedImage {
   index: number
   src: string

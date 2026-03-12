@@ -10,6 +10,8 @@ import { extractAnswerText, buildQABlock, type UpdateDocumentAnswerFn } from '@/
 
 interface QuestionCardProps {
   question: Question
+  index?: number
+  total?: number
   onInsert: (text: string) => void
   onUpdateDocumentAnswer?: UpdateDocumentAnswerFn
 }
@@ -59,7 +61,7 @@ function getAnswerSummary(question: Question): string {
   return firstLine.length > 60 ? firstLine.slice(0, 60) + '...' : firstLine
 }
 
-export function QuestionCard({ question, onInsert, onUpdateDocumentAnswer }: QuestionCardProps) {
+export function QuestionCard({ question, index, total, onInsert, onUpdateDocumentAnswer }: QuestionCardProps) {
   const [customInput, setCustomInput] = useState('')
   const [explainResult, setExplainResult] = useState<ExplainOptionsResult | null>(
     () => explainCache.get(question.id) ?? null
@@ -288,6 +290,8 @@ export function QuestionCard({ question, onInsert, onUpdateDocumentAnswer }: Que
     </>
   )
 
+  const questionLabel = index != null && total != null ? `Q${index}/${total}` : null
+
   // --- Answered state (collapsed / reopened) ---
 
   if (question.answered) {
@@ -306,6 +310,9 @@ export function QuestionCard({ question, onInsert, onUpdateDocumentAnswer }: Que
           className={cn('flex items-start gap-2 mb-2', !reopened && 'cursor-pointer')}
           onClick={!reopened ? handleToggleReopen : undefined}
         >
+          {questionLabel && (
+            <span className="text-[10px] font-mono text-text-muted/50 shrink-0">{questionLabel}</span>
+          )}
           <span className="text-xs font-semibold text-accent-green font-mono shrink-0">
             &#10003; 已添加
           </span>
@@ -406,6 +413,9 @@ export function QuestionCard({ question, onInsert, onUpdateDocumentAnswer }: Que
   return (
     <Card className="transition-all duration-200">
       <div className="flex items-start gap-2 mb-2">
+        {questionLabel && (
+          <span className="text-[10px] font-mono text-text-muted/50 shrink-0">{questionLabel}</span>
+        )}
         <span
           className={cn(
             'text-xs font-semibold uppercase tracking-wider',
