@@ -8,7 +8,7 @@ import { copyToClipboard, syncToVault, syncFileExists, renameSyncedFile } from '
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { toast } from './ui/Toast'
 import { getFileName } from '@/lib/utils'
-import { parsePages } from '@/lib/page-utils'
+import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 interface EditorToolbarProps {
   onUpdate: () => void
@@ -53,6 +53,8 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings, onRename }: Ed
 
   const pages = parsePages(content)
   const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
+  const currentPageTitle = getPageTitle(content, activePageIndex)
+  const currentPageLabel = formatPageLabel(activePageIndex, currentPageTitle, currentPageName)
   const message = filePath && content ? buildCopyMessage(filePath, currentPageName, activePageIndex) : ''
 
   const handleCopyPath = async () => {
@@ -202,7 +204,7 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings, onRename }: Ed
 
   const detailRows = [
     { label: '文件路径', value: filePath || '—' },
-    { label: '当前页面', value: currentPageName },
+    { label: '当前页面', value: currentPageLabel },
     { label: '页面数', value: `${pages.length}` },
     { label: '创建时间', value: formatTime(createdAt) },
     { label: '最后编辑', value: formatTime(lastEdited) },

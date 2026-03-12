@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { usePageStatusStore } from '@/stores/page-status-store'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useAgent } from '@/hooks/useAgent'
-import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion, slugifyToBranchName } from '@/lib/page-utils'
+import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion, slugifyToBranchName, formatPageLabel } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
 import type { EditorHandle } from '@/hooks/useEditor'
@@ -179,26 +179,28 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
 
         {displayOrder.map((i) => {
           const page = pages[i]
+          const pageTitle = i > 0 ? getPageTitle(content, i) : ''
           return (
             <div key={i} data-page-index={i} onFocus={() => handleFocus(i)}>
               {/* Section Header */}
               <div className={`flex items-center gap-3 px-6 py-3 border-b border-border sticky top-0 z-10 ${
                 i === activePageIndex ? 'bg-accent-blue/5' : 'bg-bg-secondary'
               }`}>
-                <span className="text-[13px] font-semibold text-accent-blue font-mono shrink-0">
-                  {getPageVersion(i)}
-                </span>
-                <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
-                <span className="text-[13px] font-medium text-text-primary font-mono shrink-0">
-                  {page.name}
-                </span>
-                {i > 0 && (
+                {i === 0 ? (
                   <>
+                    <span className="text-[13px] font-semibold text-accent-blue font-mono shrink-0">
+                      {getPageVersion(i)}
+                    </span>
                     <span className="text-[13px] text-text-muted font-mono shrink-0">·</span>
-                    <span className={`text-[13px] font-mono truncate ${getPageTitle(content, i) ? 'text-text-secondary' : 'text-text-muted/40 italic'}`}>
-                      {getPageTitle(content, i) || 'Enter version name'}
+                    <span className="text-[13px] font-medium text-text-primary font-mono shrink-0">
+                      Base PRD
                     </span>
                   </>
+                ) : (
+                  <span className={`text-[13px] font-semibold font-mono shrink-0 ${pageTitle ? 'text-accent-blue' : 'text-text-muted'}`}>
+                    {formatPageLabel(i, pageTitle, page.name)}
+                    {!pageTitle && <span className="ml-2 text-text-muted/40 italic font-normal text-[12px]">Enter heading</span>}
+                  </span>
                 )}
                 <PageStatusBadge pageName={page.name} />
                 <div className="flex-1 h-px bg-border" />

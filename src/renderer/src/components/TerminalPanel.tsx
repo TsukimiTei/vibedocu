@@ -1,4 +1,6 @@
 import { TerminalView } from './TerminalView'
+import { useDocumentStore } from '@/stores/document-store'
+import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 interface TerminalPanelProps {
   sessionId: string
@@ -9,6 +11,10 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ sessionId, cwd, prompt, pageName, onClose }: TerminalPanelProps) {
+  const content = useDocumentStore((s) => s.content)
+  const pages = parsePages(content)
+  const pageIndex = pages.findIndex((p) => p.name === pageName)
+  const displayLabel = pageIndex >= 0 ? formatPageLabel(pageIndex, getPageTitle(content, pageIndex), pageName) : pageName
   return (
     <div
       className="flex flex-col border-t border-border bg-bg-primary"
@@ -20,7 +26,7 @@ export function TerminalPanel({ sessionId, cwd, prompt, pageName, onClose }: Ter
           <span className="text-[11px] font-mono text-accent-blue">TERMINAL</span>
           <span className="text-[11px] font-mono text-text-muted">&mdash;</span>
           <span className="text-[11px] font-mono text-text-secondary truncate max-w-[300px]">
-            {pageName}
+            {displayLabel}
           </span>
         </div>
         <button

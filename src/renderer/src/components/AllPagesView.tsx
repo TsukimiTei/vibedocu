@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useDocumentStore } from '@/stores/document-store'
-import { parsePages } from '@/lib/page-utils'
+import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 export function AllPagesView() {
   const content = useDocumentStore((s) => s.content)
   const [descending, setDescending] = useState(false)
 
   const pages = parsePages(content)
-  const displayPages = descending ? [...pages].reverse() : pages
+  const indexedPages = pages.map((page, i) => ({ page, originalIndex: i }))
+  const displayPages = descending ? [...indexedPages].reverse() : indexedPages
 
   return (
     <div className="h-full overflow-y-auto">
@@ -24,11 +25,11 @@ export function AllPagesView() {
       </div>
 
       <div className="px-6 py-4">
-        {displayPages.map((page, i) => (
-          <div key={`${page.name}-${i}`} className="mb-8">
+        {displayPages.map(({ page, originalIndex }) => (
+          <div key={`${page.name}-${originalIndex}`} className="mb-8">
             <div className="flex items-center gap-3 mb-4">
               <span className="text-[14px] font-semibold text-accent-blue font-mono">
-                {page.name}
+                {formatPageLabel(originalIndex, getPageTitle(content, originalIndex), page.name)}
               </span>
               <div className="flex-1 h-px bg-border" />
             </div>

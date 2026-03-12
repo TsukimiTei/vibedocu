@@ -3,7 +3,7 @@ import { useDocumentStore } from '@/stores/document-store'
 import { usePageStatusStore } from '@/stores/page-status-store'
 import { AgentPanel } from './AgentPanel'
 import { TerminalView } from './TerminalView'
-import { parsePages } from '@/lib/page-utils'
+import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 import type { UpdateDocumentAnswerFn } from '@/lib/qa-utils'
 
@@ -23,6 +23,13 @@ export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: 
   const content = useDocumentStore((s) => s.content)
   const pages = parsePages(content)
   const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
+
+  // Helper: look up formatted display label for a page name
+  const getDisplayLabel = (pageName: string): string => {
+    const idx = pages.findIndex((p) => p.name === pageName)
+    if (idx < 0) return pageName
+    return formatPageLabel(idx, getPageTitle(content, idx), pageName)
+  }
 
   const hasSession = !!allSessions[currentPageName]
   const pageStatus = usePageStatusStore((s) => s.getStatus(currentPageName))
@@ -81,7 +88,7 @@ export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: 
             >
               <div className="flex items-center px-4 py-1.5 bg-bg-secondary border-b border-border shrink-0">
                 <span className="text-[11px] font-mono text-text-secondary truncate">
-                  {session.pageName}
+                  {getDisplayLabel(session.pageName)}
                 </span>
               </div>
               <div className="flex-1 min-h-0">
