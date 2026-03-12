@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import type { Question, QuestionOption } from '@/types/agent'
 import { Card } from './ui/Card'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
+import { explainOptions, type ExplainOptionsResult } from '@/services/openrouter-service'
+import { useSettingsStore } from '@/stores/settings-store'
 
 interface QuestionCardProps {
   question: Question
@@ -22,6 +24,9 @@ const categoryColors: Record<string, string> = {
 
 const SELECT_ALL_PATTERNS = /以上都要|以上全部|全部都要|都要|all of the above/i
 
+// Session-level cache for explain results (keyed by question id)
+const explainCache = new Map<string, ExplainOptionsResult>()
+
 function getOptionText(opt: QuestionOption | string): string {
   return typeof opt === 'string' ? opt : opt.text
 }
@@ -40,6 +45,13 @@ function buildSelectAllAnswer(options: (QuestionOption | string)[], selectedText
 
 export function QuestionCard({ question, onInsert }: QuestionCardProps) {
   const [customInput, setCustomInput] = useState('')
+  const [explainResult, setExplainResult] = useState<ExplainOptionsResult | null>(
+    () => explainCache.get(question.id) ?? null
+  )
+  const [explaining, setExplaining] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(0)
+  const [showExplain, setShowExplain] = useState(false)
+  const abortRef = useRef(false)
 
   const insertQA = (answer: string) => {
     const text = `\n\n**Q: ${question.text}**\n\nA: ${answer}\n`
@@ -71,6 +83,48 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
     setCustomInput('')
   }
 
+  const handleExplain = useCallback(async () => {
+    if (!question.options) return
+
+    // Use cache if available
+    const cached = explainCache.get(question.id)
+    if (cached) {
+      setExplainResult(cached)
+      setVisibleCount(cached.explanations.length)
+      setShowExplain(true)
+      return
+    }
+
+    setExplaining(true)
+    setShowExplain(true)
+    setVisibleCount(0)
+    abortRef.current = false
+
+    const { apiKey, model } = useSettingsStore.getState()
+    const optionTexts = question.options
+      .filter((o) => !isSelectAll(o))
+      .map(getOptionText)
+
+    try {
+      const result = await explainOptions(question.text, optionTexts, model, apiKey)
+      if (abortRef.current) return
+
+      explainCache.set(question.id, result)
+      setExplainResult(result)
+
+      // Reveal explanations one by one with animation
+      for (let i = 1; i <= result.explanations.length; i++) {
+        if (abortRef.current) return
+        await new Promise((r) => setTimeout(r, 150))
+        setVisibleCount(i)
+      }
+    } catch (err) {
+      console.error('[explain-options] error:', err)
+    } finally {
+      setExplaining(false)
+    }
+  }, [question.id, question.text, question.options])
+
   if (question.answered) {
     return (
       <Card className="transition-all duration-200 opacity-60 border-accent-green/20">
@@ -90,6 +144,8 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
     )
   }
 
+  const isMultipleChoice = question.type === 'multiple-choice' && question.options
+
   return (
     <Card className="transition-all duration-200">
       <div className="flex items-start gap-2 mb-2">
@@ -101,7 +157,7 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
         >
           {question.category}
         </span>
-        {question.type === 'multiple-choice' && (
+        {isMultipleChoice && (
           <span className="text-xs text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded">
             Choice
           </span>
@@ -110,33 +166,88 @@ export function QuestionCard({ question, onInsert }: QuestionCardProps) {
 
       <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">{question.text}</h3>
 
-      <button
-        onClick={handleInsertQuestion}
-        className="w-full mb-4 px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono"
-      >
-        &gt; 添加到文档 _
-      </button>
+      <div className="flex gap-2 mb-4">
+        {isMultipleChoice && (
+          <button
+            onClick={handleExplain}
+            disabled={explaining}
+            className={cn(
+              'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
+              explaining
+                ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
+                : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
+            )}
+          >
+            {explaining ? '> 分析中...' : '> 解释选项'}
+          </button>
+        )}
+        <button
+          onClick={handleInsertQuestion}
+          className={cn(
+            'px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono',
+            isMultipleChoice ? 'flex-1' : 'w-full'
+          )}
+        >
+          &gt; 添加到文档 _
+        </button>
+      </div>
 
-      {question.type === 'multiple-choice' && question.options && (
+      {isMultipleChoice && (
         <div className="space-y-2 mb-4">
-          {question.options.map((option, i) => {
+          {question.options!.map((option, i) => {
             const optText = getOptionText(option)
             const selectAll = isSelectAll(option)
+            // Find matching explanation (skip select-all options)
+            const explanation = showExplain && explainResult && !selectAll
+              ? explainResult.explanations.find((e) => e.optionText === optText)
+              : null
+            const explanationIndex = explanation
+              ? explainResult!.explanations.indexOf(explanation)
+              : -1
+            const isVisible = explanationIndex >= 0 && explanationIndex < visibleCount
+
             return (
-              <button
-                key={i}
-                onClick={() => handleOptionClick(option)}
-                className={cn(
-                  'w-full text-left px-3 py-2 rounded border text-sm transition-colors cursor-pointer',
-                  selectAll
-                    ? 'border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50'
-                    : 'border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue/30'
+              <div key={i}>
+                <button
+                  onClick={() => handleOptionClick(option)}
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded border text-sm transition-colors cursor-pointer',
+                    selectAll
+                      ? 'border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50'
+                      : 'border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue/30'
+                  )}
+                >
+                  {optText}
+                </button>
+                {isVisible && explanation && (
+                  <div className="ml-3 mt-1 mb-1 pl-3 border-l-2 border-accent-blue/20 animate-fadeIn">
+                    <p className="text-xs text-text-muted leading-relaxed">{explanation.explanation}</p>
+                  </div>
                 )}
-              >
-                {optText}
-              </button>
+              </div>
             )
           })}
+
+          {/* Summary */}
+          {showExplain && explainResult && visibleCount >= explainResult.explanations.length && (
+            <div className="mt-3 px-3 py-2 rounded bg-bg-tertiary border border-border/50 animate-fadeIn">
+              <p className="text-xs text-text-secondary leading-relaxed">{explainResult.summary}</p>
+            </div>
+          )}
+
+          {/* Collapse button */}
+          {showExplain && (explainResult || explaining) && (
+            <button
+              onClick={() => {
+                setShowExplain(false)
+                abortRef.current = true
+                setExplaining(false)
+              }}
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer font-mono"
+            >
+              收起解释
+            </button>
+          )}
         </div>
       )}
 

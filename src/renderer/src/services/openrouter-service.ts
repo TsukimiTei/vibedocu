@@ -2,7 +2,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { generateObject, generateText } from 'ai'
 import { z } from 'zod'
 import type { AgentResponse } from '@/types/agent'
-import { buildAnalysisPrompt, buildFileSelectionPrompt } from './prompt-builder'
+import { buildAnalysisPrompt, buildFileSelectionPrompt, buildPartialAnalysisPrompt } from './prompt-builder'
 import type { ImageData } from './prompt-builder'
 
 const optionSchema = z.union([
@@ -200,5 +200,115 @@ export async function analyzeDocument(
       })
       return extractAndParseJSON(text)
     }
+  }
+}
+
+export interface OptionExplanation {
+  optionText: string
+  explanation: string
+}
+
+export interface ExplainOptionsResult {
+  explanations: OptionExplanation[]
+  summary: string
+}
+
+const explainResponseSchema = z.object({
+  explanations: z.array(
+    z.object({
+      optionText: z.string(),
+      explanation: z.string()
+    })
+  ),
+  summary: z.string()
+})
+
+export async function explainOptions(
+  questionText: string,
+  options: string[],
+  model: string,
+  apiKey: string
+): Promise<ExplainOptionsResult> {
+  const openrouter = createOpenRouter({ apiKey })
+  const system = `你是一个产品顾问，帮助不太懂技术的用户理解选项含义。请用简洁、口语化的中文解释。
+
+对于每个选项，用 1-2 句话解释它的含义和适用场景。
+最后给出一段总结，格式如「如果你想要 X，就选 A；如果你更在意 Y，就选 B」。
+
+返回严格 JSON 格式：
+{
+  "explanations": [
+    { "optionText": "选项原文", "explanation": "通俗解释" }
+  ],
+  "summary": "总结建议"
+}
+
+只返回 JSON 对象，不要其他文字。`
+
+  const prompt = `问题：${questionText}\n\n选项：\n${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`
+
+  try {
+    const { object } = await generateObject({
+      model: openrouter(model),
+      schema: explainResponseSchema,
+      system,
+      prompt,
+      temperature: 0.5,
+      maxTokens: 2000
+    })
+    return object as ExplainOptionsResult
+  } catch {
+    const { text } = await generateText({
+      model: openrouter(model),
+      system,
+      prompt,
+      temperature: 0.5,
+      maxTokens: 2000
+    })
+    let cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    const start = cleaned.indexOf('{')
+    const end = cleaned.lastIndexOf('}')
+    if (start !== -1 && end > start) cleaned = cleaned.slice(start, end + 1)
+    cleaned = cleaned.replace(/,\s*([}\]])/g, '$1')
+    return JSON.parse(cleaned) as ExplainOptionsResult
+  }
+}
+
+export async function analyzeSelectedText(
+  selectedText: string,
+  fullPageContent: string,
+  model: string,
+  apiKey: string,
+  customQuestion?: string,
+  basePrdContext?: string | null
+): Promise<AgentResponse> {
+  const openrouter = createOpenRouter({ apiKey })
+  const { system, userContent } = buildPartialAnalysisPrompt(
+    selectedText,
+    fullPageContent,
+    customQuestion,
+    basePrdContext
+  )
+  const plainText = userContent.map((p) => p.type === 'text' ? p.text : '').join('')
+
+  try {
+    const { object } = await generateObject({
+      model: openrouter(model),
+      schema: agentResponseSchema,
+      system,
+      prompt: plainText,
+      temperature: 0.7,
+      maxTokens: 4000
+    })
+    return object as AgentResponse
+  } catch {
+    const { text } = await generateText({
+      model: openrouter(model),
+      system,
+      prompt: plainText,
+      temperature: 0.7,
+      maxTokens: 4000
+    })
+    return extractAndParseJSON(text)
   }
 }
