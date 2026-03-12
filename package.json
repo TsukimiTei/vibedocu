@@ -1,6 +1,6 @@
 {
   "name": "vibedocu",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "VibeDocs - AI-powered vibe coding document assistant",
   "main": "./out/main/index.js",
   "scripts": {
@@ -61,7 +61,12 @@
         "zip"
       ],
       "icon": "build/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
     },
     "npmRebuild": true,
     "files": [
