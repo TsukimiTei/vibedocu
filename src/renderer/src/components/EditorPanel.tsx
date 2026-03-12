@@ -2,11 +2,13 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { MarkdownEditor } from './MarkdownEditor'
 import { EditorToolbar } from './EditorToolbar'
 import { PageStatusBadge } from './PageStatusBadge'
+import { SelectionToolbar } from './SelectionToolbar'
 import { useDocumentStore } from '@/stores/document-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { usePageStatusStore } from '@/stores/page-status-store'
 import { useTerminalStore } from '@/stores/terminal-store'
+import { useAgent } from '@/hooks/useAgent'
 import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion, slugifyToBranchName } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
@@ -26,6 +28,8 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
   const editorRefs = useRef<Map<number, EditorHandle>>(new Map())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pendingFocusRef = useRef<number | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement>(null)
+  const { runPartialAnalysis } = useAgent()
 
   const pages = parsePages(content)
 
@@ -154,7 +158,13 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       <EditorToolbar onUpdate={onUpdate} onSave={onSave} onRename={onRename} onOpenSettings={onOpenSettings} />
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto relative">
+        <div ref={editorContainerRef} className="relative">
+        <SelectionToolbar
+          containerRef={editorContainerRef}
+          onAskAgent={(text) => runPartialAnalysis(text)}
+          onCustomAsk={(text, question) => runPartialAnalysis(text, question)}
+        />
         {/* New Page Button (top when reversed) */}
         {pageOrderReversed && (
           <div className="flex items-center justify-center py-6 border-b border-border/50">
@@ -233,6 +243,7 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
