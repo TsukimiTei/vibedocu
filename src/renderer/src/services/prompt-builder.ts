@@ -89,6 +89,35 @@ export function buildFileSelectionPrompt(
   }
 }
 
+export function buildPartialAnalysisPrompt(
+  selectedText: string,
+  fullPageContent: string,
+  customQuestion?: string,
+  basePrdContext?: string | null
+): { system: string; userContent: UserContentPart[] } {
+  let systemPrompt = SYSTEM_PROMPT
+  systemPrompt += '\n\n用户选中了文档中的一段文字，请以选中文本为焦点进行分析，同时参考当前页面的完整上下文。'
+  if (customQuestion) {
+    systemPrompt += '\n用户还附带了一个自定义问题，请优先围绕这个问题进行分析和回答。'
+  }
+
+  let textPrompt = ''
+  if (basePrdContext) {
+    textPrompt += `Base PRD context:\n\n---\n\n${basePrdContext}\n\n---\n\n`
+  }
+  textPrompt += `Full page content for context:\n\n---\n\n${fullPageContent}\n\n---\n\n`
+  textPrompt += `User selected the following text for focused analysis:\n\n> ${selectedText}\n\n`
+  if (customQuestion) {
+    textPrompt += `User's question about this text: ${customQuestion}\n\n`
+  }
+  textPrompt += 'Return ONLY a valid JSON object.'
+
+  return {
+    system: systemPrompt,
+    userContent: [{ type: 'text', text: textPrompt }]
+  }
+}
+
 export function buildCopyMessage(
   filePath: string,
   pageName: string,
