@@ -16,6 +16,10 @@ import { toast } from '@/components/ui/Toast'
 import type { ImageData } from '@/services/prompt-builder'
 
 function getProjectDir(filePath: string): string {
+  // Use the explicitly configured project directory from settings when available
+  const settingsDir = useSettingsStore.getState().projectDir
+  if (settingsDir) return settingsDir
+  // Fall back to the document's parent directory
   const i = filePath.lastIndexOf('/')
   return i > 0 ? filePath.substring(0, i) : filePath
 }

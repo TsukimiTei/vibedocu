@@ -12,6 +12,7 @@ import { useSettingsStore } from './stores/settings-store'
 import { useFileOps } from './hooks/useFileOps'
 import { useAgent } from './hooks/useAgent'
 import type { EditorHandle } from './hooks/useEditor'
+import { findQAInMarkdown, replaceQAAnswer, extractAnswerText, buildQABlock, type UpdateAnswerResult } from './lib/qa-utils'
 
 export default function App() {
   const filePath = useDocumentStore((s) => s.filePath)
@@ -63,6 +64,37 @@ export default function App() {
     []
   )
 
+  const handleUpdateDocumentAnswer = useCallback(
+    (questionText: string, newAnswer: string, storedAnswer: string, force?: boolean): UpdateAnswerResult => {
+      const editor = activeEditorRef.current
+      if (!editor) {
+        return 'not-found-inserted'
+      }
+
+      const markdown = editor.getMarkdown()
+      const found = findQAInMarkdown(markdown, questionText)
+
+      if (!found) {
+        // Q&A not found in document — append to end
+        const qaBlock = buildQABlock(questionText, newAnswer)
+        editor.setMarkdown(markdown + qaBlock)
+        return 'not-found-inserted'
+      }
+
+      // Check if the document answer was manually modified
+      const storedAnswerText = extractAnswerText(storedAnswer)
+      if (!force && found.answer !== storedAnswerText) {
+        return 'conflict'
+      }
+
+      // Replace the answer in the document
+      const newMd = replaceQAAnswer(markdown, questionText, newAnswer)
+      editor.setMarkdown(newMd)
+      return 'replaced'
+    },
+    []
+  )
+
   if (!filePath) {
     return (
       <>
@@ -90,6 +122,7 @@ export default function App() {
               <LeftPanel
                 onInsert={handleInsert}
                 onOpenSettings={() => setSettingsOpen(true)}
+                onUpdateDocumentAnswer={handleUpdateDocumentAnswer}
               />
             }
             right={

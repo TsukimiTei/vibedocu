@@ -25,6 +25,7 @@ interface SettingsStore {
   obsidianVaultPath: string
   projectDir: string
   pageOrderReversed: boolean
+  docProjectDirs: Record<string, string>
 
   setApiKey: (key: string) => void
   setModel: (model: string) => void
@@ -36,6 +37,7 @@ interface SettingsStore {
   setProjectDir: (path: string) => void
   togglePageOrder: () => void
   updateRecentFile: (oldPath: string, newPath: string) => void
+  bindProjectDir: (docPath: string, dir: string) => void
 }
 
 function applyTheme(theme: ThemeId) {
@@ -53,6 +55,7 @@ export const useSettingsStore = create<SettingsStore>()(
       obsidianVaultPath: '',
       projectDir: '',
       pageOrderReversed: true,
+      docProjectDirs: {},
 
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
@@ -69,12 +72,28 @@ export const useSettingsStore = create<SettingsStore>()(
           recentFiles: [filePath, ...state.recentFiles.filter((f) => f !== filePath)].slice(0, 10)
         })),
       removeRecentFile: (filePath) =>
-        set((state) => ({
-          recentFiles: state.recentFiles.filter((f) => f !== filePath)
-        })),
+        set((state) => {
+          const { [filePath]: _, ...remainingDirs } = state.docProjectDirs
+          return {
+            recentFiles: state.recentFiles.filter((f) => f !== filePath),
+            docProjectDirs: remainingDirs
+          }
+        }),
       updateRecentFile: (oldPath, newPath) =>
+        set((state) => {
+          const updated: Record<string, string> = { ...state.docProjectDirs }
+          if (updated[oldPath]) {
+            updated[newPath] = updated[oldPath]
+            delete updated[oldPath]
+          }
+          return {
+            recentFiles: state.recentFiles.map((f) => (f === oldPath ? newPath : f)),
+            docProjectDirs: updated
+          }
+        }),
+      bindProjectDir: (docPath, dir) =>
         set((state) => ({
-          recentFiles: state.recentFiles.map((f) => (f === oldPath ? newPath : f))
+          docProjectDirs: { ...state.docProjectDirs, [docPath]: dir }
         }))
     }),
     {

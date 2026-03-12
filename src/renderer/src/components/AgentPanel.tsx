@@ -4,6 +4,7 @@ import { useDocumentStore } from '@/stores/document-store'
 import { useContextStore } from '@/stores/context-store'
 import { CompletenessBar } from './CompletenessBar'
 import { QuestionCard } from './QuestionCard'
+import type { UpdateDocumentAnswerFn } from '@/lib/qa-utils'
 import { Button } from './ui/Button'
 import { useAgent } from '@/hooks/useAgent'
 import { parsePages } from '@/lib/page-utils'
@@ -11,6 +12,7 @@ import { parsePages } from '@/lib/page-utils'
 interface AgentPanelProps {
   onInsert: (text: string) => void
   onOpenSettings: () => void
+  onUpdateDocumentAnswer?: UpdateDocumentAnswerFn
 }
 
 function formatSize(bytes: number): string {
@@ -71,7 +73,7 @@ function ContextSection() {
   )
 }
 
-export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
+export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: AgentPanelProps) {
   const { currentQuestions, sessions, isLoading, error } = useAgentStore()
   const { runAnalysis } = useAgent()
   const activePageIndex = useDocumentStore((s) => s.activePageIndex)
@@ -158,6 +160,7 @@ export function AgentPanel({ onInsert, onOpenSettings }: AgentPanelProps) {
               onInsert(text)
               useAgentStore.getState().markAnswered(q.id, text)
             }}
+            onUpdateDocumentAnswer={onUpdateDocumentAnswer}
           />
         ))}
 

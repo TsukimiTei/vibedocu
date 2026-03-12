@@ -13,6 +13,7 @@ interface AgentStore {
   setError: (error: string | null) => void
   addSession: (questions: Omit<Question, 'id' | 'answered'>[], completeness: CompletenessScore, pageIndex: number) => void
   markAnswered: (questionId: string, answer: string) => void
+  updateAnswer: (questionId: string, answer: string) => void
   switchToPage: (pageIndex: number) => void
   clearCurrent: () => void
   loadFromFile: (docPath: string) => Promise<void>
@@ -30,6 +31,28 @@ function scheduleSave(sessions: AgentSession[]) {
       window.api.agent.write(docPath, data).catch(() => {})
     }
   }, 500)
+}
+
+/** Patch a single question across currentQuestions and all sessions */
+function patchQuestion(
+  state: Pick<AgentStore, 'currentQuestions' | 'sessions'>,
+  questionId: string,
+  patch: Partial<Question>
+) {
+  const updatedQuestions = state.currentQuestions.map((q) =>
+    q.id === questionId ? { ...q, ...patch } : q
+  )
+  const updatedSessions = state.sessions.map((session) => {
+    if (!session.questions.some((q) => q.id === questionId)) return session
+    return {
+      ...session,
+      questions: session.questions.map((q) =>
+        q.id === questionId ? { ...q, ...patch } : q
+      )
+    }
+  })
+  scheduleSave(updatedSessions)
+  return { currentQuestions: updatedQuestions, sessions: updatedSessions }
 }
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
@@ -69,19 +92,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   markAnswered: (questionId, answer) =>
-    set((state) => {
-      const updatedQuestions = state.currentQuestions.map((q) =>
-        q.id === questionId ? { ...q, answered: true, answer } : q
-      )
-      const updatedSessions = state.sessions.map((session) => ({
-        ...session,
-        questions: session.questions.map((q) =>
-          q.id === questionId ? { ...q, answered: true, answer } : q
-        )
-      }))
-      scheduleSave(updatedSessions)
-      return { currentQuestions: updatedQuestions, sessions: updatedSessions }
-    }),
+    set((state) => patchQuestion(state, questionId, { answered: true, answer })),
+
+  updateAnswer: (questionId, answer) =>
+    set((state) => patchQuestion(state, questionId, { answer })),
 
   switchToPage: (pageIndex) => {
     const { sessions } = get()
