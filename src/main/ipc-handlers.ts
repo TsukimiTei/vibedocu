@@ -10,7 +10,9 @@ import {
   writeContextData,
   renameDocument,
   readPageStatusData,
-  writePageStatusData
+  writePageStatusData,
+  readStyleProfile,
+  writeStyleProfile
 } from './file-service'
 import { openFileDialog, chooseDirectoryDialog } from './dialog-service'
 import { checkSyncConflict, syncToVault, syncFileExists, renameSyncedFile } from './sync-service'
@@ -139,6 +141,15 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('pageStatus:write', async (_event, docPath: string, data: string) => {
     return writePageStatusData(docPath, data)
+  })
+
+  // Style profile
+  ipcMain.handle('style:read', async (_event, dirPath: string) => {
+    return readStyleProfile(dirPath)
+  })
+
+  ipcMain.handle('style:write', async (_event, dirPath: string, data: string) => {
+    return writeStyleProfile(dirPath, data)
   })
 
   // PTY IPC

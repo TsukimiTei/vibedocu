@@ -145,6 +145,24 @@ export async function writeContextData(docPath: string, data: string): Promise<v
   await fsWriteFile(dataPath, data, 'utf-8')
 }
 
+/** Style profile persistence — stored in user-chosen directory */
+export async function readStyleProfile(dirPath: string): Promise<string | null> {
+  const dataPath = join(dirPath, 'style-profile.json')
+  if (!existsSync(dataPath)) return null
+  try {
+    return await fsReadFile(dataPath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+export async function writeStyleProfile(dirPath: string, data: string): Promise<void> {
+  if (!existsSync(dirPath)) {
+    await mkdir(dirPath, { recursive: true })
+  }
+  await fsWriteFile(join(dirPath, 'style-profile.json'), data, 'utf-8')
+}
+
 /** Page status persistence */
 function getPageStatusPath(docPath: string): string {
   const docName = parse(docPath).name

@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 import { explainOptions, type ExplainOptionsResult } from '@/services/openrouter-service'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAgentStore } from '@/stores/agent-store'
+import { useSmartAgentStore } from '@/stores/smart-agent-store'
+import { appendQARecord } from '@/services/style-service'
 import { extractAnswerText, buildQABlock, type UpdateDocumentAnswerFn } from '@/lib/qa-utils'
 
 interface QuestionCardProps {
@@ -78,8 +80,30 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
 
   const isMultipleChoice = question.type === 'multiple-choice' && question.options
 
+  // Smart Agent: read prediction for this question
+  const prediction = useSmartAgentStore((s) => s.predictions.get(question.id))
+  const isAutoAnswered = useSmartAgentStore((s) => s.autoAnsweredIds.has(question.id))
+  const smartAgentMode = useSettingsStore((s) => s.smartAgentMode)
+
+  const recordToStyle = (answerText: string) => {
+    const { styleHistoryDir, smartAgentMode: mode } = useSettingsStore.getState()
+    if (mode === 'off' || !styleHistoryDir) return
+    appendQARecord(styleHistoryDir, {
+      question: question.text,
+      questionType: question.type,
+      answer: answerText,
+      category: question.category,
+      timestamp: Date.now()
+    }).catch(() => {})
+  }
+
   const insertQA = (answer: string) => {
     onInsert(buildQABlock(question.text, answer))
+    recordToStyle(answer)
+    // Clear auto-answered highlight when user manually answers
+    if (isAutoAnswered) {
+      useSmartAgentStore.getState().removeAutoAnswered(question.id)
+    }
   }
 
   /** Resolve an option click into an answer string, then pass to the submit fn */
@@ -197,6 +221,10 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
     }
 
     useAgentStore.getState().updateAnswer(question.id, buildQABlock(question.text, newAnswerText))
+    recordToStyle(newAnswerText)
+    if (isAutoAnswered) {
+      useSmartAgentStore.getState().removeAutoAnswered(question.id)
+    }
     resetReopenState()
   }
 
@@ -208,35 +236,21 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
     resetReopenState()
   }
 
-  // --- Shared options rendering ---
+  // --- Shared options rendering (without explain button — it's rendered separately) ---
 
   const renderOptionsList = (
     onOptionClick: (option: QuestionOption | string) => void,
-    currentAnswer?: string
+    currentAnswer?: string,
+    pred?: typeof prediction
   ) => (
     <>
-      {/* Explain button */}
-      <div className="flex gap-2 mb-3">
-        <button
-          onClick={handleExplain}
-          disabled={explaining}
-          className={cn(
-            'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
-            explaining
-              ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
-              : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
-          )}
-        >
-          {explaining ? '> 分析中...' : '> 解释选项'}
-        </button>
-      </div>
-
       {/* Options */}
       <div className="space-y-2 mb-3">
         {question.options!.map((option, i) => {
           const optText = getOptionText(option)
           const selectAll = isSelectAll(option)
           const highlighted = currentAnswer !== undefined && optText === currentAnswer
+          const isPredicted = pred?.predictedOptionIndex === i && !selectAll
           const explanation = showExplain && explainResult && !selectAll
             ? explainResult.explanations.find((e) => e.optionText === optText)
             : null
@@ -253,12 +267,15 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
                   'w-full text-left px-3 py-2 rounded border text-sm transition-colors cursor-pointer',
                   highlighted
                     ? 'border-accent-green/50 bg-accent-green/10 text-accent-green'
-                    : selectAll
-                      ? 'border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50'
-                      : 'border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue/30'
+                    : isPredicted
+                      ? 'border-accent-purple/50 bg-accent-purple/10 text-accent-purple'
+                      : selectAll
+                        ? 'border-accent-blue/30 text-accent-blue hover:bg-accent-blue/10 hover:border-accent-blue/50'
+                        : 'border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue/30'
                 )}
               >
                 {highlighted && <span className="mr-1.5">●</span>}
+                {isPredicted && <span className="mr-1.5 text-[10px] text-accent-purple">AI</span>}
                 {optText}
               </button>
               {isVisible && explanation && (
@@ -303,7 +320,9 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
         'transition-all duration-200',
         reopened
           ? 'border-accent-blue/30'
-          : 'opacity-70 border-accent-green/20 hover:opacity-90 cursor-pointer'
+          : isAutoAnswered
+            ? 'opacity-85 border-accent-purple/30 bg-accent-purple/5 hover:opacity-95 cursor-pointer'
+            : 'opacity-70 border-accent-green/20 hover:opacity-90 cursor-pointer'
       )}>
         {/* Header — always visible, clickable to toggle */}
         <div
@@ -313,8 +332,11 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
           {questionLabel && (
             <span className="text-[10px] font-mono text-text-muted/50 shrink-0">{questionLabel}</span>
           )}
-          <span className="text-xs font-semibold text-accent-green font-mono shrink-0">
-            &#10003; 已添加
+          <span className={cn(
+            'text-xs font-semibold font-mono shrink-0',
+            isAutoAnswered ? 'text-accent-purple' : 'text-accent-green'
+          )}>
+            {isAutoAnswered ? '⚡ AI 自动作答' : '✓ 已添加'}
           </span>
           <span
             className={cn(
@@ -370,9 +392,28 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
         {/* Reopened: show options / input */}
         {reopened && !conflictAnswer && (
           <div className="mt-3 pt-3 border-t border-border/50">
-            {isMultipleChoice && renderOptionsList(
-              (opt) => resolveOption(opt, submitReopenAnswer),
-              previousAnswer
+            {isMultipleChoice && (
+              <>
+                {/* Explain button for reopened */}
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={handleExplain}
+                    disabled={explaining}
+                    className={cn(
+                      'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
+                      explaining
+                        ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
+                        : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
+                    )}
+                  >
+                    {explaining ? '> 分析中...' : '> 解释选项'}
+                  </button>
+                </div>
+                {renderOptionsList(
+                  (opt) => resolveOption(opt, submitReopenAnswer),
+                  previousAnswer
+                )}
+              </>
             )}
 
             {/* Text input for custom / open-ended answer */}
@@ -408,7 +449,7 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
     )
   }
 
-  // --- Unanswered state (original behavior) ---
+  // --- Unanswered state ---
 
   return (
     <Card className="transition-all duration-200">
@@ -433,16 +474,51 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
 
       <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">{question.text}</h3>
 
+      {/* Action buttons: explain (choice only) + add to doc — single row */}
       <div className="flex gap-2 mb-4">
+        {isMultipleChoice && (
+          <button
+            onClick={handleExplain}
+            disabled={explaining}
+            className={cn(
+              'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
+              explaining
+                ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
+                : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
+            )}
+          >
+            {explaining ? '> 分析中...' : '> 解释选项'}
+          </button>
+        )}
         <button
           onClick={handleInsertQuestion}
-          className="w-full px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono"
+          className={cn(
+            'px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono',
+            isMultipleChoice ? 'flex-1' : 'w-full'
+          )}
         >
           &gt; 添加到文档 _
         </button>
       </div>
 
-      {isMultipleChoice && renderOptionsList((opt) => resolveOption(opt, insertQA))}
+      {isMultipleChoice && renderOptionsList(
+        (opt) => resolveOption(opt, insertQA),
+        undefined,
+        smartAgentMode === 'mark-only' ? prediction : undefined
+      )}
+
+      {/* Smart Agent: open-ended prediction suggestion */}
+      {!isMultipleChoice && smartAgentMode === 'mark-only' && prediction && (
+        <div className="mb-3 px-3 py-2 rounded bg-accent-purple/5 border border-accent-purple/20">
+          <p className="text-sm text-text-muted italic leading-relaxed">{prediction.predictedAnswer}</p>
+          <button
+            onClick={() => insertQA(prediction.predictedAnswer)}
+            className="mt-1.5 text-xs text-accent-purple hover:text-accent-purple/80 transition-colors cursor-pointer font-mono"
+          >
+            &gt; 采用建议 _
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <input

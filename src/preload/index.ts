@@ -47,6 +47,12 @@ const api = {
     ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('sync:renameSynced', vaultPath, oldFileName, newFileName)
   },
+  style: {
+    read: (dirPath: string): Promise<string | null> =>
+      ipcRenderer.invoke('style:read', dirPath),
+    write: (dirPath: string, data: string): Promise<void> =>
+      ipcRenderer.invoke('style:write', dirPath, data)
+  },
   pageStatus: {
     read: (docPath: string): Promise<string | null> =>
       ipcRenderer.invoke('pageStatus:read', docPath),

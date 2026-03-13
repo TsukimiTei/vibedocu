@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { DEFAULT_MODEL } from '@/lib/constants'
 import type { ThemeId } from '@/types/settings'
+import type { SmartAgentMode } from '@/types/smart-agent'
 
 // File-based storage via main process IPC — survives app crashes
 const fileStorage: StateStorage = {
@@ -26,6 +27,8 @@ interface SettingsStore {
   projectDir: string
   pageOrderReversed: boolean
   docProjectDirs: Record<string, string>
+  smartAgentMode: SmartAgentMode
+  styleHistoryDir: string
 
   setApiKey: (key: string) => void
   setModel: (model: string) => void
@@ -38,6 +41,8 @@ interface SettingsStore {
   togglePageOrder: () => void
   updateRecentFile: (oldPath: string, newPath: string) => void
   bindProjectDir: (docPath: string, dir: string) => void
+  setSmartAgentMode: (mode: SmartAgentMode) => void
+  setStyleHistoryDir: (dir: string) => void
 }
 
 function applyTheme(theme: ThemeId) {
@@ -56,6 +61,8 @@ export const useSettingsStore = create<SettingsStore>()(
       projectDir: '',
       pageOrderReversed: true,
       docProjectDirs: {},
+      smartAgentMode: 'off' as SmartAgentMode,
+      styleHistoryDir: '',
 
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
@@ -94,7 +101,9 @@ export const useSettingsStore = create<SettingsStore>()(
       bindProjectDir: (docPath, dir) =>
         set((state) => ({
           docProjectDirs: { ...state.docProjectDirs, [docPath]: dir }
-        }))
+        })),
+      setSmartAgentMode: (mode) => set({ smartAgentMode: mode }),
+      setStyleHistoryDir: (dir) => set({ styleHistoryDir: dir })
     }),
     {
       name: 'vibedocu-settings',

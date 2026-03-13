@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAgentStore } from '@/stores/agent-store'
 import { useDocumentStore } from '@/stores/document-store'
 import { useContextStore } from '@/stores/context-store'
+import { useSmartAgentStore } from '@/stores/smart-agent-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { CompletenessBar } from './CompletenessBar'
 import { QuestionCard } from './QuestionCard'
 import type { UpdateDocumentAnswerFn } from '@/lib/qa-utils'
@@ -75,9 +77,30 @@ function ContextSection() {
 
 export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: AgentPanelProps) {
   const { currentQuestions, sessions, isLoading, error } = useAgentStore()
-  const { runAnalysis } = useAgent()
+  const { runAnalysis, runAutoAnswer } = useAgent()
   const activePageIndex = useDocumentStore((s) => s.activePageIndex)
   const content = useDocumentStore((s) => s.content)
+
+  // Smart Agent state
+  const isPredicting = useSmartAgentStore((s) => s.isPredicting)
+  const isAutoAnswering = useSmartAgentStore((s) => s.isAutoAnswering)
+  const styleProfile = useSmartAgentStore((s) => s.styleProfile)
+  const predictions = useSmartAgentStore((s) => s.predictions)
+  const smartAgentMode = useSettingsStore((s) => s.smartAgentMode)
+
+  // Auto-answer: trigger when predictions arrive in auto-answer mode
+  useEffect(() => {
+    if (
+      smartAgentMode === 'auto-answer' &&
+      predictions.size > 0 &&
+      !isPredicting &&
+      !isAutoAnswering &&
+      currentQuestions.some((q) => !q.answered)
+    ) {
+      runAutoAnswer(onInsert)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- onInsert/runAutoAnswer are stable refs
+  }, [predictions, isPredicting, isAutoAnswering, smartAgentMode, currentQuestions])
 
   const pages = parsePages(content)
   const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
@@ -106,6 +129,37 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
       <ContextSection />
 
       <CompletenessBar onRetry={runAnalysis} />
+
+      {/* Smart Agent status */}
+      {smartAgentMode !== 'off' && (
+        <div className="px-4 py-2 border-b border-border">
+          {isPredicting && (
+            <div className="flex items-center gap-2 text-xs text-accent-purple">
+              <span className="inline-block w-3 h-3 border border-accent-purple/30 border-t-accent-purple rounded-full animate-spin" />
+              AI 正在预测答案...
+            </div>
+          )}
+          {isAutoAnswering && (
+            <div className="flex items-center gap-2 text-xs text-accent-purple">
+              <span className="inline-block w-3 h-3 border border-accent-purple/30 border-t-accent-purple rounded-full animate-spin" />
+              AI 正在自动作答...
+            </div>
+          )}
+          {!isPredicting && !isAutoAnswering && styleProfile && styleProfile.totalAnswered < 3 && (
+            <p className="text-[11px] text-text-muted">
+              智能代理：需要至少回答 3 个问题后才能学习你的风格（当前 {styleProfile.totalAnswered}/3）
+            </p>
+          )}
+          {!isPredicting && !isAutoAnswering && styleProfile && styleProfile.totalAnswered >= 3 && styleProfile.styleSummary && (
+            <details className="text-[11px]">
+              <summary className="text-accent-purple cursor-pointer hover:text-accent-purple/80">
+                智能代理已就绪（{smartAgentMode === 'mark-only' ? '仅标识' : '直接作答'}）
+              </summary>
+              <p className="mt-1 text-text-muted leading-relaxed">{styleProfile.styleSummary}</p>
+            </details>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {isLoading && (

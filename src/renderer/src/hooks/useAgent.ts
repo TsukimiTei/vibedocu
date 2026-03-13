@@ -3,6 +3,7 @@ import { useAgentStore } from '@/stores/agent-store'
 import { useDocumentStore } from '@/stores/document-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useContextStore } from '@/stores/context-store'
+import { useSmartAgentStore } from '@/stores/smart-agent-store'
 import { analyzeDocument, analyzeSelectedText, selectRelevantFiles } from '@/services/openrouter-service'
 import {
   scanProjectFiles,
@@ -11,8 +12,10 @@ import {
   writeContextData,
   readImageFile
 } from '@/services/file-bridge'
+import { loadStyleProfile, isStyleReady, predictAnswers } from '@/services/style-service'
 import { getPageContent, extractImages } from '@/lib/page-utils'
 import { toast } from '@/components/ui/Toast'
+import { buildQABlock } from '@/lib/qa-utils'
 import type { ImageData } from '@/services/prompt-builder'
 
 function getProjectDir(filePath: string): string {
@@ -208,6 +211,43 @@ export function useAgent() {
         images.length > 0 ? images : undefined
       )
       addSession(response.questions, response.completeness, activePageIndex)
+
+      // Smart Agent: trigger prediction if enabled
+      const { smartAgentMode, styleHistoryDir } = useSettingsStore.getState()
+      if (smartAgentMode !== 'off' && styleHistoryDir) {
+        try {
+          const profile = await loadStyleProfile(styleHistoryDir)
+          useSmartAgentStore.getState().setStyleProfile(profile)
+
+          if (isStyleReady(profile)) {
+            const latestSession = useAgentStore.getState().sessions
+            const latest = latestSession[latestSession.length - 1]
+            if (latest) {
+              useSmartAgentStore.getState().setIsPredicting(true)
+              try {
+                const preds = await predictAnswers(
+                  latest.questions.map((q) => ({
+                    id: q.id,
+                    text: q.text,
+                    type: q.type,
+                    options: q.options?.map((o) => ({ text: typeof o === 'string' ? o : o.text }))
+                  })),
+                  profile!,
+                  pageContent.slice(0, 3000),
+                  apiKey,
+                  model
+                )
+                useSmartAgentStore.getState().setPredictions(preds)
+              } finally {
+                useSmartAgentStore.getState().setIsPredicting(false)
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[smart-agent] prediction failed:', err)
+          useSmartAgentStore.getState().setIsPredicting(false)
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to analyze document'
       setError(message)
@@ -302,5 +342,47 @@ export function useAgent() {
     }
   }, [apiKey, model, setLoading, setError, addSession])
 
-  return { runAnalysis, runPartialAnalysis, refreshContext, isLoading }
+  const runAutoAnswer = useCallback(
+    (onInsert: (text: string) => void) => {
+      const { predictions } = useSmartAgentStore.getState()
+      const { currentQuestions } = useAgentStore.getState()
+      if (predictions.size === 0) return
+
+      useSmartAgentStore.getState().setIsAutoAnswering(true)
+
+      const parts: string[] = []
+      for (const q of currentQuestions) {
+        if (q.answered) continue
+        const pred = predictions.get(q.id)
+        if (!pred) continue
+
+        let answerText = pred.predictedAnswer
+        // For multiple-choice with predicted option index, use the option text
+        if (
+          q.type === 'multiple-choice' &&
+          q.options &&
+          pred.predictedOptionIndex != null &&
+          pred.predictedOptionIndex >= 0 &&
+          pred.predictedOptionIndex < q.options.length
+        ) {
+          const opt = q.options[pred.predictedOptionIndex]
+          answerText = typeof opt === 'string' ? opt : opt.text
+        }
+
+        const block = buildQABlock(q.text, answerText)
+        parts.push(block)
+        useAgentStore.getState().markAnswered(q.id, block)
+        useSmartAgentStore.getState().addAutoAnswered(q.id)
+      }
+
+      if (parts.length > 0) {
+        onInsert(parts.join('\n'))
+      }
+
+      useSmartAgentStore.getState().setIsAutoAnswering(false)
+    },
+    []
+  )
+
+  return { runAnalysis, runPartialAnalysis, refreshContext, runAutoAnswer, isLoading }
 }

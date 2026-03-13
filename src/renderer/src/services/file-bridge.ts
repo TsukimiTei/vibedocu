@@ -65,6 +65,16 @@ export async function syncToVault(
   return api.sync.toVault(filePath, vaultPath, overwrite)
 }
 
+export async function readStyleProfile(dirPath: string): Promise<string | null> {
+  if (!api.style) return null
+  return api.style.read(dirPath)
+}
+
+export async function writeStyleProfile(dirPath: string, data: string): Promise<void> {
+  if (!api.style) return
+  return api.style.write(dirPath, data)
+}
+
 export async function scanProjectFiles(
   projectDir: string,
   excludeFile?: string
