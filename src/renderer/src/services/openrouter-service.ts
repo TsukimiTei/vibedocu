@@ -274,6 +274,29 @@ export async function explainOptions(
   }
 }
 
+export async function explainQuestion(
+  questionText: string,
+  category: string,
+  model: string,
+  apiKey: string
+): Promise<string> {
+  const openrouter = createOpenRouter({ apiKey })
+  const prompt = `你是一个产品顾问。用户在写产品需求文档，AI 提了以下问题。请用 2-3 句简洁口语化的中文解释：这个问题在问什么？为什么它对产品需求很重要？
+
+问题：${questionText}
+分类：${category}
+
+只返回解释文字，不要格式化。`
+
+  const { text } = await generateText({
+    model: openrouter(model),
+    prompt,
+    temperature: 0.5,
+    maxTokens: 500
+  })
+  return text
+}
+
 export async function analyzeSelectedText(
   selectedText: string,
   fullPageContent: string,

@@ -18,6 +18,7 @@ const fileStorage: StateStorage = {
 }
 
 interface SettingsStore {
+  aiMode: AiMode
   apiKey: string
   model: string
   theme: ThemeId
@@ -30,6 +31,7 @@ interface SettingsStore {
   smartAgentMode: SmartAgentMode
   styleHistoryDir: string
 
+  setAiMode: (mode: AiMode) => void
   setApiKey: (key: string) => void
   setModel: (model: string) => void
   setTheme: (theme: ThemeId) => void
@@ -49,9 +51,12 @@ function applyTheme(theme: ThemeId) {
   document.documentElement.setAttribute('data-theme', theme)
 }
 
+export type AiMode = 'openrouter' | 'mcp'
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
+      aiMode: 'openrouter' as AiMode,
       apiKey: '',
       model: DEFAULT_MODEL,
       theme: 'dark' as ThemeId,
@@ -64,6 +69,7 @@ export const useSettingsStore = create<SettingsStore>()(
       smartAgentMode: 'off' as SmartAgentMode,
       styleHistoryDir: '',
 
+      setAiMode: (mode) => set({ aiMode: mode }),
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
       markOnboardingSeen: () => set({ hasSeenOnboarding: true }),

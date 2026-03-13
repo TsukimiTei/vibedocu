@@ -27,7 +27,16 @@ const api = {
     read: (docPath: string): Promise<string | null> =>
       ipcRenderer.invoke('agent:read', docPath),
     write: (docPath: string, data: string): Promise<void> =>
-      ipcRenderer.invoke('agent:write', docPath, data)
+      ipcRenderer.invoke('agent:write', docPath, data),
+    watch: (docPath: string): Promise<void> =>
+      ipcRenderer.invoke('agent:watch', docPath),
+    unwatch: (): Promise<void> =>
+      ipcRenderer.invoke('agent:unwatch'),
+    onChanged: (callback: (data: string) => void) => {
+      const handler = (_event: IpcRendererEvent, data: string) => callback(data)
+      ipcRenderer.on('agent:changed', handler)
+      return () => ipcRenderer.removeListener('agent:changed', handler)
+    }
   },
   sync: {
     checkConflict: (filePath: string, vaultPath: string): Promise<boolean> =>
@@ -89,6 +98,25 @@ const api = {
       branchName: string
     ): Promise<{ success: boolean; worktreePath?: string; branchName?: string; error?: string }> =>
       ipcRenderer.invoke('git:createWorktree', projectDir, branchName)
+  },
+  mcp: {
+    register: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('mcp:register'),
+    status: (): Promise<{ registered: boolean; mcpServerPath: string }> =>
+      ipcRenderer.invoke('mcp:status'),
+    warmup: (docPath?: string): Promise<void> =>
+      ipcRenderer.invoke('mcp:warmup', docPath),
+    analyze: (prompt: string, docPath: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('mcp:analyze', prompt, docPath),
+    abort: (): void =>
+      ipcRenderer.send('mcp:abort'),
+    ask: (prompt: string): Promise<{ success: boolean; text?: string; error?: string }> =>
+      ipcRenderer.invoke('mcp:ask', prompt),
+    onProgress: (callback: (chunk: string) => void) => {
+      const handler = (_event: IpcRendererEvent, chunk: string) => callback(chunk)
+      ipcRenderer.on('mcp:progress', handler)
+      return () => ipcRenderer.removeListener('mcp:progress', handler)
+    }
   },
   context: {
     scan: (

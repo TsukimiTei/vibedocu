@@ -1,4 +1,6 @@
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, BrowserWindow } from 'electron'
+import { watch, type FSWatcher } from 'fs'
+import { spawn, type ChildProcess } from 'child_process'
 import {
   readFile,
   writeFile,
@@ -89,6 +91,56 @@ export function registerIpcHandlers(): void {
     return writeAgentData(docPath, data)
   })
 
+  // Agent file watching for MCP mode
+  let agentWatcher: FSWatcher | null = null
+
+  ipcMain.handle('agent:watch', async (event, docPath: string) => {
+    // Clean up previous watcher
+    if (agentWatcher) {
+      agentWatcher.close()
+      agentWatcher = null
+    }
+
+    const { parse, dirname, join } = await import('path')
+    const { existsSync } = await import('fs')
+    const docName = parse(docPath).name
+    const dataPath = join(dirname(docPath), docName, 'agent-sessions.json')
+
+    // Ensure the directory exists before watching
+    const dataDir = join(dirname(docPath), docName)
+    if (!existsSync(dataDir)) {
+      const { mkdir } = await import('fs/promises')
+      await mkdir(dataDir, { recursive: true })
+    }
+
+    // Watch the directory for changes to agent-sessions.json
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    agentWatcher = watch(dataDir, (eventType, filename) => {
+      if (filename !== 'agent-sessions.json') return
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(async () => {
+        try {
+          if (!existsSync(dataPath)) return
+          const { readFile: fsRead } = await import('fs/promises')
+          const data = await fsRead(dataPath, 'utf-8')
+          const win = BrowserWindow.fromWebContents(event.sender)
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('agent:changed', data)
+          }
+        } catch {
+          // ignore read errors
+        }
+      }, 300)
+    })
+  })
+
+  ipcMain.handle('agent:unwatch', async () => {
+    if (agentWatcher) {
+      agentWatcher.close()
+      agentWatcher = null
+    }
+  })
+
   ipcMain.handle('sync:checkConflict', async (_event, filePath: string, vaultPath: string) => {
     return checkSyncConflict(filePath, vaultPath)
   })
@@ -132,6 +184,429 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('context:writeData', async (_event, docPath: string, data: string) => {
     return writeContextData(docPath, data)
+  })
+
+  // MCP Server registration to Claude Code
+  ipcMain.handle('mcp:register', async () => {
+    try {
+      const { homedir } = await import('os')
+      const { join, dirname } = await import('path')
+      const { readFileSync, writeFileSync, existsSync } = await import('fs')
+
+      // Determine MCP server path
+      const appPath = app.getAppPath()
+      let mcpServerPath: string
+      if (app.isPackaged) {
+        // Production: asar unpacked
+        mcpServerPath = join(dirname(appPath), 'app.asar.unpacked', 'out', 'mcp-server', 'index.mjs')
+      } else {
+        // Dev: project root
+        mcpServerPath = join(appPath, 'out', 'mcp-server', 'index.mjs')
+      }
+
+      if (!existsSync(mcpServerPath)) {
+        return { success: false, error: `MCP Server not found at ${mcpServerPath}` }
+      }
+
+      // Read or create ~/.claude.json
+      const claudeConfigPath = join(homedir(), '.claude.json')
+      let config: Record<string, any> = {}
+      if (existsSync(claudeConfigPath)) {
+        try {
+          config = JSON.parse(readFileSync(claudeConfigPath, 'utf-8'))
+        } catch {
+          // corrupted, start fresh
+        }
+      }
+
+      // Add/update vibedocs MCP server
+      if (!config.mcpServers) config.mcpServers = {}
+      config.mcpServers.vibedocs = {
+        command: 'node',
+        args: [mcpServerPath]
+      }
+
+      writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('mcp:status', async () => {
+    const { homedir } = await import('os')
+    const { join, dirname } = await import('path')
+    const { readFileSync, existsSync } = await import('fs')
+
+    const appPath = app.getAppPath()
+    let mcpServerPath: string
+    if (app.isPackaged) {
+      mcpServerPath = join(dirname(appPath), 'app.asar.unpacked', 'out', 'mcp-server', 'index.mjs')
+    } else {
+      mcpServerPath = join(appPath, 'out', 'mcp-server', 'index.mjs')
+    }
+
+    const claudeConfigPath = join(homedir(), '.claude.json')
+    let registered = false
+    if (existsSync(claudeConfigPath)) {
+      try {
+        const config = JSON.parse(readFileSync(claudeConfigPath, 'utf-8'))
+        registered = !!config.mcpServers?.vibedocs
+      } catch { /* ignore */ }
+    }
+
+    return { registered, mcpServerPath }
+  })
+
+  // MCP: session-aware claude process management
+  let claudeProcess: ChildProcess | null = null
+  let warmProcess: ChildProcess | null = null
+  let warmDocPath: string | null = null
+  let cachedClaudePath: string | null = null
+  let isWarming = false
+
+  const ALLOWED_TOOLS = 'mcp__vibedocs__vibedocs_get_analysis_schema,mcp__vibedocs__vibedocs_open_document,mcp__vibedocs__vibedocs_save_analysis,mcp__vibedocs__vibedocs_scan_project,mcp__vibedocs__vibedocs_read_project_files'
+
+  // Track session IDs per document for --resume
+  const docSessions = new Map<string, string>()
+
+  function makeCleanEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env }
+    delete env.CLAUDECODE
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('CLAUDE_CODE') || key.startsWith('CLAUDECODE')) {
+        delete env[key]
+      }
+    }
+    return env
+  }
+
+  async function findClaudeBinary(): Promise<string | null> {
+    if (cachedClaudePath) return cachedClaudePath
+
+    const { existsSync } = await import('fs')
+    const { homedir } = await import('os')
+    const { join: pathJoin } = await import('path')
+    const home = homedir()
+
+    const candidates = [
+      pathJoin(home, '.claude', 'local', 'claude'),
+      pathJoin(home, '.npm-global', 'bin', 'claude'),
+      '/usr/local/bin/claude',
+      '/opt/homebrew/bin/claude',
+      pathJoin(home, '.local', 'bin', 'claude')
+    ]
+
+    let found = candidates.find((p) => existsSync(p)) || ''
+
+    if (!found) {
+      try {
+        const { execSync } = await import('child_process')
+        const augmentedPath = `/opt/homebrew/bin:/usr/local/bin:${home}/.local/bin:${process.env.PATH || ''}`
+        found = execSync('which claude', {
+          encoding: 'utf-8',
+          env: { ...process.env, PATH: augmentedPath }
+        }).trim()
+      } catch { /* ignore */ }
+    }
+
+    if (found) cachedClaudePath = found
+    return found || null
+  }
+
+  function buildClaudeArgs(docPath: string): string[] {
+    const args = [
+      '-p', '--verbose',
+      '--output-format', 'stream-json',
+      '--allowedTools', ALLOWED_TOOLS
+    ]
+    const sessionId = docSessions.get(docPath)
+    if (sessionId) {
+      args.push('--resume', sessionId)
+    }
+    return args
+  }
+
+  function spawnForDoc(claudePath: string, docPath: string): ChildProcess {
+    const sessionId = docSessions.get(docPath)
+    console.log('[mcp] spawn: resume=%s session=%s', !!sessionId, sessionId || 'new')
+    return spawn(claudePath, buildClaudeArgs(docPath), {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: makeCleanEnv()
+    })
+  }
+
+  async function warmUp(docPath?: string): Promise<void> {
+    if (warmProcess || isWarming) return
+    isWarming = true
+    try {
+      const claudePath = await findClaudeBinary()
+      if (!claudePath || warmProcess) return
+
+      const targetDoc = docPath || null
+      if (targetDoc) {
+        console.log('[mcp:warmup] pre-spawning for doc (resume=%s)', docSessions.has(targetDoc))
+        warmProcess = spawnForDoc(claudePath, targetDoc)
+      } else {
+        // Generic warm — no session
+        console.log('[mcp:warmup] pre-spawning generic process')
+        warmProcess = spawn(claudePath, [
+          '-p', '--verbose', '--output-format', 'stream-json',
+          '--allowedTools', ALLOWED_TOOLS
+        ], { stdio: ['pipe', 'pipe', 'pipe'], env: makeCleanEnv() })
+      }
+      warmDocPath = targetDoc
+      warmProcess.on('close', () => { warmProcess = null; warmDocPath = null })
+      warmProcess.on('error', () => { warmProcess = null; warmDocPath = null })
+      warmProcess.stderr?.on('data', () => {})
+    } finally {
+      isWarming = false
+    }
+  }
+
+  app.on('before-quit', () => {
+    if (claudeProcess) { claudeProcess.kill('SIGTERM'); claudeProcess = null }
+    if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null }
+  })
+
+  ipcMain.handle('mcp:warmup', async (_event, docPath?: string) => {
+    await warmUp(docPath)
+  })
+
+  ipcMain.handle('mcp:analyze', async (_event, prompt: string, docPath: string) => {
+    if (claudeProcess) {
+      return { success: false, error: 'Analysis already in progress' }
+    }
+
+    const win = BrowserWindow.fromWebContents(_event.sender)
+
+    try {
+      let proc: ChildProcess
+
+      if (warmProcess && warmDocPath === docPath) {
+        // Pre-warmed for this exact doc — reuse
+        console.log('[mcp:analyze] using pre-warmed process (resume=%s)', docSessions.has(docPath))
+        proc = warmProcess
+        warmProcess = null
+        warmDocPath = null
+      } else {
+        // Kill stale warm process if for a different doc
+        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null; warmDocPath = null }
+
+        const claudePath = await findClaudeBinary()
+        if (!claudePath) {
+          return { success: false, error: '找不到 claude 命令，请确认已安装 Claude Code CLI' }
+        }
+        console.log('[mcp:analyze] cold start (resume=%s)', docSessions.has(docPath))
+        proc = spawnForDoc(claudePath, docPath)
+      }
+
+      claudeProcess = proc
+
+      return new Promise((resolve) => {
+        proc.stdin?.write(prompt)
+        proc.stdin?.end()
+
+        let stderr = ''
+        let lineBuf = ''
+        let resolved = false
+        const toolIdMap: Record<string, string> = {}
+        const seenMsgIds = new Set<string>()
+        let totalInputTokens = 0
+        let totalOutputTokens = 0
+        const toolLabels: Record<string, string> = {
+          vibedocs_get_analysis_schema: '加载分析框架',
+          vibedocs_open_document: '读取文档',
+          vibedocs_scan_project: '扫描项目文件',
+          vibedocs_read_project_files: '读取项目文件',
+          vibedocs_save_analysis: '保存分析结果'
+        }
+
+        const send = (data: any) => {
+          if (win && !win.isDestroyed()) win.webContents.send('mcp:progress', JSON.stringify(data))
+        }
+
+        proc.stdout?.on('data', (d) => {
+          lineBuf += d.toString()
+          const lines = lineBuf.split('\n')
+          lineBuf = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+            let evt: any = null
+            try { evt = JSON.parse(line) } catch { continue }
+
+            console.log('[mcp:evt]', evt.type, evt.subtype || '', JSON.stringify(evt).slice(0, 200))
+
+            if (evt.type === 'system' || evt.type === 'rate_limit_event') continue
+
+            if (evt.type === 'assistant') {
+              // Accumulate tokens — deduplicate by message id
+              const msgId = evt.message?.id
+              if (msgId && !seenMsgIds.has(msgId) && evt.message?.usage) {
+                seenMsgIds.add(msgId)
+                totalInputTokens += evt.message.usage.input_tokens || 0
+                totalOutputTokens += evt.message.usage.output_tokens || 0
+                send({ step: 'tokens', inputTokens: totalInputTokens, outputTokens: totalOutputTokens })
+              }
+              for (const block of (evt.message?.content || [])) {
+                if (block.type === 'tool_use') {
+                  const raw = (block.name || '').replace('mcp__vibedocs__', '')
+                  const label = toolLabels[raw] || raw
+                  if (block.id) toolIdMap[block.id] = label
+                  send({ step: 'tool', name: label, status: 'running' })
+                } else if (block.type === 'text' && block.text) {
+                  send({ step: 'text', text: block.text })
+                } else if (block.type === 'thinking') {
+                  send({ step: 'thinking' })
+                }
+              }
+            } else if (evt.type === 'user' && evt.message?.content) {
+              for (const block of evt.message.content) {
+                if (block.type === 'tool_result' && block.tool_use_id) {
+                  const label = toolIdMap[block.tool_use_id]
+                  if (label) send({ step: 'tool', name: label, status: 'done' })
+                }
+              }
+            } else if (evt.type === 'result') {
+              // Capture session ID for future --resume
+              if (evt.session_id) {
+                docSessions.set(docPath, evt.session_id)
+                console.log('[mcp] captured session:', evt.session_id)
+              }
+              send({
+                step: 'result',
+                text: typeof evt.result === 'string' ? evt.result : '',
+                durationMs: evt.duration_ms,
+                turns: evt.num_turns,
+                inputTokens: evt.usage?.input_tokens || totalInputTokens,
+                outputTokens: evt.usage?.output_tokens || totalOutputTokens
+              })
+              // Push agent data to renderer before resolving so UI updates with results
+              if (!resolved) {
+                resolved = true
+                readAgentData(docPath).then((agentData) => {
+                  if (agentData && win && !win.isDestroyed()) {
+                    win.webContents.send('agent:changed', agentData)
+                  }
+                }).catch(() => {}).finally(() => {
+                  setTimeout(() => resolve({ success: true }), 100)
+                })
+              }
+            }
+          }
+        })
+        proc.stderr?.on('data', (d) => {
+          stderr += d.toString()
+          console.log('[mcp:analyze] stderr:', d.toString().slice(0, 200))
+        })
+
+        proc.on('close', async (code) => {
+          console.log('[mcp:analyze] exited with code:', code)
+          claudeProcess = null
+          // Flush remaining line buffer (e.g. result event without trailing newline)
+          if (lineBuf.trim()) {
+            try {
+              const evt = JSON.parse(lineBuf)
+              if (evt.type === 'result') {
+                if (evt.session_id) {
+                  docSessions.set(docPath, evt.session_id)
+                }
+                send({
+                  step: 'result',
+                  text: typeof evt.result === 'string' ? evt.result : '',
+                  durationMs: evt.duration_ms,
+                  turns: evt.num_turns,
+                  inputTokens: evt.usage?.input_tokens || totalInputTokens,
+                  outputTokens: evt.usage?.output_tokens || totalOutputTokens
+                })
+              }
+            } catch { /* not valid JSON, ignore */ }
+            lineBuf = ''
+          }
+          // Push agent data to renderer regardless
+          try {
+            const agentData = await readAgentData(docPath)
+            if (agentData && win && !win.isDestroyed()) {
+              win.webContents.send('agent:changed', agentData)
+            }
+          } catch { /* ignore */ }
+          // Resolve only if result event never arrived (e.g. error)
+          if (!resolved) {
+            resolved = true
+            if (code === 0) {
+              resolve({ success: true })
+            } else {
+              resolve({ success: false, error: stderr.slice(0, 500) || `claude exited with code ${code}` })
+            }
+          }
+          warmUp(docPath).catch(() => {})
+        })
+
+        proc.on('error', (err) => {
+          console.log('[mcp:analyze] spawn error:', err.message)
+          claudeProcess = null
+          if (!resolved) {
+            resolved = true
+            resolve({ success: false, error: err.message })
+          }
+        })
+      })
+    } catch (err: any) {
+      claudeProcess = null
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.on('mcp:abort', () => {
+    if (claudeProcess) {
+      claudeProcess.kill('SIGTERM')
+      claudeProcess = null
+    }
+    if (warmProcess) {
+      warmProcess.kill('SIGTERM')
+      warmProcess = null
+    }
+  })
+
+  // Lightweight Claude call — no MCP tools, just prompt → text response
+  ipcMain.handle('mcp:ask', async (_event, prompt: string) => {
+    try {
+      const claudePath = await findClaudeBinary()
+      if (!claudePath) {
+        return { success: false, error: '找不到 claude 命令' }
+      }
+      const proc = spawn(claudePath, ['-p', '--output-format', 'json'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: makeCleanEnv()
+      })
+      proc.stdin?.write(prompt)
+      proc.stdin?.end()
+
+      return new Promise<{ success: boolean; text?: string; error?: string }>((resolve) => {
+        let stdout = ''
+        let stderr = ''
+        proc.stdout?.on('data', (d) => { stdout += d.toString() })
+        proc.stderr?.on('data', (d) => { stderr += d.toString() })
+        proc.on('close', (code) => {
+          if (code !== 0) {
+            resolve({ success: false, error: stderr.slice(0, 500) || `exited ${code}` })
+            return
+          }
+          try {
+            const parsed = JSON.parse(stdout)
+            resolve({ success: true, text: parsed.result || stdout })
+          } catch {
+            resolve({ success: true, text: stdout })
+          }
+        })
+        proc.on('error', (err) => {
+          resolve({ success: false, error: err.message })
+        })
+      })
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
   })
 
   // Page status
