@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --publish onTag",
+    "dist": "electron-vite build && node scripts/build-mcp.mjs && electron-builder --publish onTag",
     "rebuild": "electron-rebuild -f -w node-pty",
     "build:mcp": "node scripts/build-mcp.mjs"
   },
