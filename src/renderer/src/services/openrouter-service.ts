@@ -223,6 +223,28 @@ const explainResponseSchema = z.object({
   summary: z.string()
 })
 
+export const EXPLAIN_OPTIONS_SYSTEM = `你是一个产品顾问，帮助不太懂技术的用户理解选项含义。请用简洁、口语化的中文解释。
+
+对于每个选项，用 1-2 句话解释它的含义和适用场景。
+最后给出一段总结，格式如「如果你想要 X，就选 A；如果你更在意 Y，就选 B」。
+
+返回严格 JSON 格式：
+{"explanations": [{"optionText": "选项原文", "explanation": "通俗解释"}], "summary": "总结建议"}
+
+只返回 JSON 对象，不要其他文字。`
+
+export function buildExplainOptionsPrompt(questionText: string, options: string[]): string {
+  return `问题：${questionText}\n\n选项：\n${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`
+}
+
+export const EXPLAIN_QUESTION_PROMPT_TEMPLATE = (questionText: string, category: string) =>
+  `你是一个产品顾问。用户在写产品需求文档，AI 提了以下问题。请用 2-3 句简洁口语化的中文解释：这个问题在问什么？为什么它对产品需求很重要？
+
+问题：${questionText}
+分类：${category}
+
+只返回解释文字，不要格式化。`
+
 export async function explainOptions(
   questionText: string,
   options: string[],
@@ -230,22 +252,8 @@ export async function explainOptions(
   apiKey: string
 ): Promise<ExplainOptionsResult> {
   const openrouter = createOpenRouter({ apiKey })
-  const system = `你是一个产品顾问，帮助不太懂技术的用户理解选项含义。请用简洁、口语化的中文解释。
-
-对于每个选项，用 1-2 句话解释它的含义和适用场景。
-最后给出一段总结，格式如「如果你想要 X，就选 A；如果你更在意 Y，就选 B」。
-
-返回严格 JSON 格式：
-{
-  "explanations": [
-    { "optionText": "选项原文", "explanation": "通俗解释" }
-  ],
-  "summary": "总结建议"
-}
-
-只返回 JSON 对象，不要其他文字。`
-
-  const prompt = `问题：${questionText}\n\n选项：\n${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`
+  const system = EXPLAIN_OPTIONS_SYSTEM
+  const prompt = buildExplainOptionsPrompt(questionText, options)
 
   try {
     const { object } = await generateObject({
@@ -281,12 +289,7 @@ export async function explainQuestion(
   apiKey: string
 ): Promise<string> {
   const openrouter = createOpenRouter({ apiKey })
-  const prompt = `你是一个产品顾问。用户在写产品需求文档，AI 提了以下问题。请用 2-3 句简洁口语化的中文解释：这个问题在问什么？为什么它对产品需求很重要？
-
-问题：${questionText}
-分类：${category}
-
-只返回解释文字，不要格式化。`
+  const prompt = EXPLAIN_QUESTION_PROMPT_TEMPLATE(questionText, category)
 
   const { text } = await generateText({
     model: openrouter(model),

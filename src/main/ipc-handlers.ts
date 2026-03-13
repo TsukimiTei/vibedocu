@@ -91,6 +91,7 @@ export function registerIpcHandlers(): void {
 
   // Agent file watching for MCP mode
   let agentWatcher: FSWatcher | null = null
+  let agentDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
   ipcMain.handle('agent:watch', async (event, docPath: string) => {
     // Clean up previous watcher
@@ -112,11 +113,11 @@ export function registerIpcHandlers(): void {
     }
 
     // Watch the directory for changes to agent-sessions.json
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    agentDebounceTimer = null
     agentWatcher = watch(dataDir, (eventType, filename) => {
       if (filename !== 'agent-sessions.json') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(async () => {
+      if (agentDebounceTimer) clearTimeout(agentDebounceTimer)
+      agentDebounceTimer = setTimeout(async () => {
         try {
           if (!existsSync(dataPath)) return
           const { readFile: fsRead } = await import('fs/promises')
@@ -133,6 +134,10 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('agent:unwatch', async () => {
+    if (agentDebounceTimer) {
+      clearTimeout(agentDebounceTimer)
+      agentDebounceTimer = null
+    }
     if (agentWatcher) {
       agentWatcher.close()
       agentWatcher = null
@@ -213,7 +218,8 @@ export function registerIpcHandlers(): void {
         try {
           config = JSON.parse(readFileSync(claudeConfigPath, 'utf-8'))
         } catch {
-          // corrupted, start fresh
+          // Corrupted config — preserve original file, don't overwrite
+          return { success: false, error: '~/.claude.json 格式损坏，请手动修复后重试' }
         }
       }
 
@@ -224,7 +230,11 @@ export function registerIpcHandlers(): void {
         args: [mcpServerPath]
       }
 
-      writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+      // Atomic write: write to temp file then rename
+      const tmpPath = claudeConfigPath + '.tmp'
+      writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8')
+      const { renameSync } = await import('fs')
+      renameSync(tmpPath, claudeConfigPath)
       return { success: true }
     } catch (err: any) {
       return { success: false, error: err.message }
@@ -262,6 +272,8 @@ export function registerIpcHandlers(): void {
   let warmDocPath: string | null = null
   let cachedClaudePath: string | null = null
   let isWarming = false
+  let warmIdleTimer: ReturnType<typeof setTimeout> | null = null
+  const WARM_IDLE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
   const ALLOWED_TOOLS = 'mcp__vibedocs__vibedocs_get_analysis_schema,mcp__vibedocs__vibedocs_open_document,mcp__vibedocs__vibedocs_save_analysis,mcp__vibedocs__vibedocs_scan_project,mcp__vibedocs__vibedocs_read_project_files'
 
@@ -354,9 +366,15 @@ export function registerIpcHandlers(): void {
         ], { stdio: ['pipe', 'pipe', 'pipe'], env: makeCleanEnv() })
       }
       warmDocPath = targetDoc
-      warmProcess.on('close', () => { warmProcess = null; warmDocPath = null })
-      warmProcess.on('error', () => { warmProcess = null; warmDocPath = null })
+      warmProcess.on('close', () => { warmProcess = null; warmDocPath = null; if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null } })
+      warmProcess.on('error', () => { warmProcess = null; warmDocPath = null; if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null } })
       warmProcess.stderr?.on('data', () => {})
+      // Kill warm process if idle for too long
+      if (warmIdleTimer) clearTimeout(warmIdleTimer)
+      warmIdleTimer = setTimeout(() => {
+        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null; warmDocPath = null }
+        warmIdleTimer = null
+      }, WARM_IDLE_TIMEOUT)
     } finally {
       isWarming = false
     }
@@ -376,6 +394,10 @@ export function registerIpcHandlers(): void {
       return { success: false, error: 'Analysis already in progress' }
     }
 
+    // Synchronous sentinel to prevent race conditions from rapid calls
+    const sentinel = {} as any
+    claudeProcess = sentinel
+
     const win = BrowserWindow.fromWebContents(_event.sender)
 
     try {
@@ -393,6 +415,7 @@ export function registerIpcHandlers(): void {
 
         const claudePath = await findClaudeBinary()
         if (!claudePath) {
+          claudeProcess = null
           return { success: false, error: '找不到 claude 命令，请确认已安装 Claude Code CLI' }
         }
         console.log('[mcp:analyze] cold start (resume=%s)', docSessions.has(docPath))
@@ -495,7 +518,7 @@ export function registerIpcHandlers(): void {
           }
         })
         proc.stderr?.on('data', (d) => {
-          stderr += d.toString()
+          if (stderr.length < 10_000) stderr += d.toString()
           console.log('[mcp:analyze] stderr:', d.toString().slice(0, 200))
         })
 
@@ -584,22 +607,34 @@ export function registerIpcHandlers(): void {
       return new Promise<{ success: boolean; text?: string; error?: string }>((resolve) => {
         let stdout = ''
         let stderr = ''
+        let resolved = false
+        const done = (result: { success: boolean; text?: string; error?: string }) => {
+          if (resolved) return
+          resolved = true
+          clearTimeout(timeout)
+          resolve(result)
+        }
+        // 60s timeout to prevent hanging
+        const timeout = setTimeout(() => {
+          proc.kill('SIGTERM')
+          done({ success: false, error: '请求超时（60s）' })
+        }, 60_000)
         proc.stdout?.on('data', (d) => { stdout += d.toString() })
         proc.stderr?.on('data', (d) => { stderr += d.toString() })
         proc.on('close', (code) => {
           if (code !== 0) {
-            resolve({ success: false, error: stderr.slice(0, 500) || `exited ${code}` })
+            done({ success: false, error: stderr.slice(0, 500) || `exited ${code}` })
             return
           }
           try {
             const parsed = JSON.parse(stdout)
-            resolve({ success: true, text: parsed.result || stdout })
+            done({ success: true, text: parsed.result || stdout })
           } catch {
-            resolve({ success: true, text: stdout })
+            done({ success: true, text: stdout })
           }
         })
         proc.on('error', (err) => {
-          resolve({ success: false, error: err.message })
+          done({ success: false, error: err.message })
         })
       })
     } catch (err: any) {

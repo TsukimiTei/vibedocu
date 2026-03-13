@@ -3,7 +3,11 @@ import type { Question, QuestionOption } from '@/types/agent'
 import { Card } from './ui/Card'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
-import { explainOptions, explainQuestion, type ExplainOptionsResult } from '@/services/openrouter-service'
+import {
+  explainOptions, explainQuestion, type ExplainOptionsResult,
+  EXPLAIN_OPTIONS_SYSTEM, buildExplainOptionsPrompt,
+  EXPLAIN_QUESTION_PROMPT_TEMPLATE
+} from '@/services/openrouter-service'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { extractAnswerText, buildQABlock, type UpdateDocumentAnswerFn } from '@/lib/qa-utils'
@@ -148,25 +152,13 @@ export function QuestionCard({ question, onInsert, onUpdateDocumentAnswer }: Que
         // Use OpenRouter (fast)
         result = await explainOptions(question.text, optionTexts, model, apiKey)
       } else if (aiMode === 'mcp') {
-        // Use Claude Code
-        const prompt = `你是一个产品顾问，帮助不太懂技术的用户理解选项含义。请用简洁、口语化的中文解释。
-
-对于每个选项，用 1-2 句话解释它的含义和适用场景。
-最后给出一段总结，格式如「如果你想要 X，就选 A；如果你更在意 Y，就选 B」。
-
-返回严格 JSON 格式：
-{"explanations": [{"optionText": "选项原文", "explanation": "通俗解释"}], "summary": "总结建议"}
-
-只返回 JSON 对象，不要其他文字。
-
-问题：${question.text}
-
-选项：
-${optionTexts.map((o, i) => `${i + 1}. ${o}`).join('\n')}`
+        // Use Claude Code — reuse shared prompt
+        const prompt = `${EXPLAIN_OPTIONS_SYSTEM}\n\n${buildExplainOptionsPrompt(question.text, optionTexts)}`
 
         const res = await window.api.mcp.ask(prompt)
         if (!res.success || !res.text) throw new Error(res.error || '解释失败')
-        const text = res.text.trim()
+        // Strip markdown code fences before extracting JSON
+        let text = res.text.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
         const start = text.indexOf('{')
         const end = text.lastIndexOf('}')
         if (start === -1 || end <= start) throw new Error('无法解析回复')
@@ -203,12 +195,7 @@ ${optionTexts.map((o, i) => `${i + 1}. ${o}`).join('\n')}`
     setQuestionExplaining(true)
 
     const { apiKey, model, aiMode } = useSettingsStore.getState()
-    const qPrompt = `你是一个产品顾问。用户在写产品需求文档，AI 提了以下问题。请用 2-3 句简洁口语化的中文解释：这个问题在问什么？为什么它对产品需求很重要？
-
-问题：${question.text}
-分类：${question.category}
-
-只返回解释文字，不要格式化。`
+    const qPrompt = EXPLAIN_QUESTION_PROMPT_TEMPLATE(question.text, question.category)
 
     try {
       let text: string
