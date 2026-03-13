@@ -104,26 +104,34 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   completeness: null,
   isLoading: false,
   mcpSteps: [],
+  mcpStartTime: 0,
+  mcpStats: null,
   mcpActivity: '',
   error: null,
 
-  setLoading: (loading, resume) => set(loading
-    ? {
-        isLoading: true,
-        error: null,
+  setLoading: (loading, resume) => {
+    if (!loading) {
+      set({ isLoading: false, mcpSteps: [], mcpActivity: '' })
+      return
+    }
+    // Only initialize MCP pipeline state when in MCP mode
+    const isMcp = typeof resume === 'boolean'
+    set({
+      isLoading: true,
+      error: null,
+      ...(isMcp ? {
         mcpSteps: (resume ? MCP_PIPELINE_RESUME : MCP_PIPELINE_FULL).map((s, i) => ({
           ...s, status: (i === 0 ? 'running' : 'pending') as McpStep['status']
         })),
         mcpStartTime: Date.now(),
         mcpStats: { durationMs: 0, turns: 0, inputTokens: 0, outputTokens: 0 },
         mcpActivity: ''
-      }
-    : {
-        isLoading: false,
+      } : {
         mcpSteps: [],
         mcpActivity: ''
-      }
-  ),
+      })
+    })
+  },
   pushMcpEvent: (raw) => {
     try {
       const evt = JSON.parse(raw)
@@ -284,12 +292,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
     // Start watching for MCP changes
     if (window.api.agent.watch) {
-      window.api.agent.watch(docPath)
-      // Clean up previous listener
+      // Clean up previous listener BEFORE setting up new watcher
       if ((window as any).__vibedocu_agentUnwatch) {
         (window as any).__vibedocu_agentUnwatch()
+        (window as any).__vibedocu_agentUnwatch = null
       }
-      (window as any).__vibedocu_agentUnwatch = window.api.agent.onChanged((data: string) => {
+      await window.api.agent.watch(docPath)
+      ;(window as any).__vibedocu_agentUnwatch = window.api.agent.onChanged((data: string) => {
         get()._loadRaw(data)
       })
     }
@@ -311,12 +320,19 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       }
       // Restore latest session as current view
       const latest = sessions[sessions.length - 1]
-      set({
+      const update: Partial<AgentStore> = {
         sessions,
         currentQuestions: latest.questions,
         completeness: latest.completeness,
         error: null
-      })
+      }
+      // Only clear isLoading if we're in MCP mode (watcher-driven).
+      // Don't clobber OpenRouter's loading state.
+      const current = get()
+      if (current.isLoading && current.mcpSteps.length > 0) {
+        update.isLoading = false
+      }
+      set(update)
     } catch {
       // Corrupted data — ignore
     }
@@ -329,6 +345,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       completeness: null,
       isLoading: false,
       mcpSteps: [],
+      mcpStartTime: 0,
       mcpStats: null,
       mcpActivity: '',
       error: null

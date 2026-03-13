@@ -155,10 +155,10 @@ export function useAgent() {
         setError(message)
       } finally {
         // _loadRaw handles isLoading via agent:changed event.
-        // Fallback: if still loading after 3s (e.g. save_analysis failed), force stop.
+        // Fallback: if still loading after 30s (e.g. save_analysis failed), force stop.
         setTimeout(() => {
           if (useAgentStore.getState().isLoading) setLoading(false)
-        }, 3000)
+        }, 30_000)
       }
       return
     }

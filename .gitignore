@@ -3,3 +3,4 @@ out/
 dist/
 *.dmg
 .DS_Store
+.mcp.json

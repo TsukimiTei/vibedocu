@@ -175,18 +175,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await openDocument(args!.file_path as string)
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
       }
-      case 'vibedocs_write_document': {
-        const result = await writeDocument(
-          args!.file_path as string,
-          args!.content as string,
-          args!.page_index as number | undefined
-        )
-        return { content: [{ type: 'text', text: JSON.stringify(result) }] }
-      }
-      case 'vibedocs_add_page': {
-        const result = await addPage(args!.file_path as string, args!.page_name as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result) }] }
-      }
+      case 'vibedocs_write_document':
+      case 'vibedocs_add_page':
+        // These tools are defined for future use but not currently in the ALLOWED_TOOLS whitelist.
+        return {
+          content: [{ type: 'text', text: `Tool ${name} is not enabled in this context.` }],
+          isError: true
+        }
       case 'vibedocs_scan_project': {
         const result = await scanProject(
           args!.project_dir as string,

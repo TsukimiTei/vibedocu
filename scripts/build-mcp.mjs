@@ -12,7 +12,7 @@ await build({
   target: 'node18',
   format: 'esm',
   outfile: resolve(root, 'out/mcp-server/index.mjs'),
-  external: ['@modelcontextprotocol/sdk'],
+  // Bundle everything including @modelcontextprotocol/sdk for production packaging
   alias: {
     '@': resolve(root, 'src/renderer/src')
   },
