@@ -279,8 +279,33 @@
 
     <div class="version">
       <div class="version-header">
-        <span class="version-tag">v1.1.0</span>
+        <span class="version-tag">v1.11.0</span>
         <span class="version-badge badge-latest">Latest</span>
+        <span class="version-date">2026-03</span>
+      </div>
+      <div class="change-group">
+        <h3 class="added">Added</h3>
+        <ul class="change-list">
+          <li>Claude Code 模式 — 新增 MCP（Model Context Protocol）AI 分析模式，可在设置中与 OpenRouter 模式切换</li>
+          <li>MCP Server — 7 个工具供 Claude Code 直接读写文档、扫描项目文件、保存分析结果</li>
+          <li>Pipeline 进度 UI — 首次分析展示 6 步全流程，增量分析展示 3 步流程，实时滚动进度</li>
+          <li>Session 复用 — MCP 模式下通过 --resume 复用会话，增量分析速度显著提升</li>
+          <li>解释问题 / 解释选项 — 两种 AI 模式均支持逐题解释和逐选项 AI 解释</li>
+        </ul>
+      </div>
+      <div class="change-group">
+        <h3 class="fixed">Fixed</h3>
+        <ul class="change-list">
+          <li>修复分析错误信息被 setLoading 吞掉的问题</li>
+          <li>修复 Pipeline 步骤顺序错乱（pending 步骤出现在 running 上方）</li>
+          <li>修复完成信号竞争导致 stats 显示 0.0s / 0 turns</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="version">
+      <div class="version-header">
+        <span class="version-tag">v1.1.0</span>
         <span class="version-date">2026-03</span>
       </div>
       <div class="change-group">
