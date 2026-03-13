@@ -89,3 +89,11 @@ export async function writeContextData(docPath: string, data: string): Promise<v
   if (!api.context) return
   return api.context.writeData(docPath, data)
 }
+
+export async function registerMcpServer(): Promise<{ success: boolean; error?: string }> {
+  return api.mcp.register()
+}
+
+export async function getMcpStatus(): Promise<{ registered: boolean; mcpServerPath: string }> {
+  return api.mcp.status()
+}
