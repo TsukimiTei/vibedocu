@@ -29,35 +29,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       }
     },
     {
-      name: 'vibedocs_write_document',
-      description:
-        'Write content to a VibeDocs document. Can write the entire document or update a single page by index.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          file_path: { type: 'string', description: 'Absolute path to the .md document' },
-          content: { type: 'string', description: 'Content to write' },
-          page_index: {
-            type: 'number',
-            description: 'If provided, only update this page (0-based index)'
-          }
-        },
-        required: ['file_path', 'content']
-      }
-    },
-    {
-      name: 'vibedocs_add_page',
-      description: 'Add a new feature page to a VibeDocs document.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          file_path: { type: 'string', description: 'Absolute path to the .md document' },
-          page_name: { type: 'string', description: 'Name for the new page' }
-        },
-        required: ['file_path', 'page_name']
-      }
-    },
-    {
       name: 'vibedocs_scan_project',
       description:
         'Scan a project directory and return a file manifest (docs, config, code files). Skips node_modules, .git, etc.',
@@ -175,13 +146,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await openDocument(args!.file_path as string)
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
       }
-      case 'vibedocs_write_document':
-      case 'vibedocs_add_page':
-        // These tools are defined for future use but not currently in the ALLOWED_TOOLS whitelist.
-        return {
-          content: [{ type: 'text', text: `Tool ${name} is not enabled in this context.` }],
-          isError: true
-        }
       case 'vibedocs_scan_project': {
         const result = await scanProject(
           args!.project_dir as string,

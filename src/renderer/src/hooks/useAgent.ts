@@ -114,8 +114,10 @@ export function useAgent() {
 
         const projectDir = getProjectDir(filePath)
 
+        const safeFilePath = JSON.stringify(filePath)
+        const safeProjectDir = JSON.stringify(projectDir)
         const prompt = hasHistory
-          ? `用户更新了文档，请重新分析 ${filePath} 的第 ${activePageIndex} 页。
+          ? `用户更新了文档，请重新分析 ${safeFilePath} 的第 ${activePageIndex} 页。
 
 步骤：
 1. 调用 vibedocs_open_document 读取最新文档内容（你已有分析框架和项目上下文，无需重新获取）
@@ -124,12 +126,12 @@ export function useAgent() {
 4. 调用 vibedocs_save_analysis 保存分析结果
 
 直接执行，不要解释。`
-          : `使用 vibedocs MCP 工具分析文档 ${filePath} 的第 ${activePageIndex} 页。
+          : `使用 vibedocs MCP 工具分析文档 ${safeFilePath} 的第 ${activePageIndex} 页。
 
 步骤：
 1. 调用 vibedocs_get_analysis_schema 获取分析框架
 2. 调用 vibedocs_open_document 读取文档内容
-3. 调用 vibedocs_scan_project 扫描项目目录 ${projectDir}，了解项目结构
+3. 调用 vibedocs_scan_project 扫描项目目录 ${safeProjectDir}，了解项目结构
 4. 如果有相关代码文件，调用 vibedocs_read_project_files 读取关键文件
 5. 结合文档内容和项目上下文，根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个问题和完成度评分
 6. 调用 vibedocs_save_analysis 保存分析结果
@@ -367,15 +369,17 @@ export function useAgent() {
         }
 
         const partialProjectDir = getProjectDir(filePath)
-        const prompt = `使用 vibedocs MCP 工具分析文档 ${filePath} 第 ${activePageIndex} 页中的选中文字。
+        const safePartialFilePath = JSON.stringify(filePath)
+        const safePartialProjectDir = JSON.stringify(partialProjectDir)
+        const prompt = `使用 vibedocs MCP 工具分析文档 ${safePartialFilePath} 第 ${activePageIndex} 页中的选中文字。
 
-选中内容："${selectedText}"
-${customQuestion ? `用户问题：${customQuestion}` : ''}
+选中内容："${selectedText.replace(/"/g, '\\"')}"
+${customQuestion ? `用户问题：${customQuestion.replace(/`/g, "'")}` : ''}
 
 步骤：
 1. 调用 vibedocs_get_analysis_schema 获取分析框架
 2. 调用 vibedocs_open_document 读取完整文档上下文
-3. 调用 vibedocs_scan_project 扫描项目目录 ${partialProjectDir}，了解项目结构
+3. 调用 vibedocs_scan_project 扫描项目目录 ${safePartialProjectDir}，了解项目结构
 4. 如果有相关代码文件，调用 vibedocs_read_project_files 读取关键文件
 5. 以选中文字为焦点，结合项目上下文进行分析
 6. 调用 vibedocs_save_analysis 保存分析结果

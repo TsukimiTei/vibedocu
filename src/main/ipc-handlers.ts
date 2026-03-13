@@ -277,8 +277,17 @@ export function registerIpcHandlers(): void {
 
   const ALLOWED_TOOLS = 'mcp__vibedocs__vibedocs_get_analysis_schema,mcp__vibedocs__vibedocs_open_document,mcp__vibedocs__vibedocs_save_analysis,mcp__vibedocs__vibedocs_scan_project,mcp__vibedocs__vibedocs_read_project_files'
 
-  // Track session IDs per document for --resume
+  // Track session IDs per document for --resume (max 50 entries, LRU eviction)
+  const DOC_SESSIONS_MAX = 50
   const docSessions = new Map<string, string>()
+  function setDocSession(docPath: string, sessionId: string) {
+    if (docSessions.size >= DOC_SESSIONS_MAX && !docSessions.has(docPath)) {
+      // Evict oldest entry
+      const oldest = docSessions.keys().next().value
+      if (oldest) docSessions.delete(oldest)
+    }
+    docSessions.set(docPath, sessionId)
+  }
 
   function makeCleanEnv(): NodeJS.ProcessEnv {
     const env = { ...process.env }
@@ -383,6 +392,9 @@ export function registerIpcHandlers(): void {
   app.on('before-quit', () => {
     if (claudeProcess) { claudeProcess.kill('SIGTERM'); claudeProcess = null }
     if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null }
+    if (agentWatcher) { agentWatcher.close(); agentWatcher = null }
+    if (agentDebounceTimer) { clearTimeout(agentDebounceTimer); agentDebounceTimer = null }
+    if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null }
   })
 
   ipcMain.handle('mcp:warmup', async (_event, docPath?: string) => {
@@ -492,7 +504,7 @@ export function registerIpcHandlers(): void {
             } else if (evt.type === 'result') {
               // Capture session ID for future --resume
               if (evt.session_id) {
-                docSessions.set(docPath, evt.session_id)
+                setDocSession(docPath, evt.session_id)
                 console.log('[mcp] captured session:', evt.session_id)
               }
               send({
@@ -531,7 +543,7 @@ export function registerIpcHandlers(): void {
               const evt = JSON.parse(lineBuf)
               if (evt.type === 'result') {
                 if (evt.session_id) {
-                  docSessions.set(docPath, evt.session_id)
+                  setDocSession(docPath, evt.session_id)
                 }
                 send({
                   step: 'result',

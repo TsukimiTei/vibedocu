@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "vibedocs": {
-      "command": "node",
-      "args": ["out/mcp-server/index.mjs"],
-      "cwd": "/Users/xenoc/Desktop/project/vibeDocs/vibedocu"
-    }
-  }
-}

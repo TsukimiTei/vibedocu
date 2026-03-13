@@ -48,6 +48,7 @@ interface AgentStore {
   mcpStartTime: number
   mcpStats: McpStats | null
   mcpActivity: string
+  mcpFinalized: boolean
   error: string | null
 
   setLoading: (loading: boolean, resume?: boolean) => void
@@ -107,11 +108,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   mcpStartTime: 0,
   mcpStats: null,
   mcpActivity: '',
+  mcpFinalized: false,
   error: null,
 
   setLoading: (loading, resume) => {
     if (!loading) {
-      set({ isLoading: false, mcpSteps: [], mcpActivity: '' })
+      set({ isLoading: false, mcpSteps: [], mcpActivity: '', mcpFinalized: false })
       return
     }
     // Only initialize MCP pipeline state when in MCP mode
@@ -125,10 +127,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         })),
         mcpStartTime: Date.now(),
         mcpStats: { durationMs: 0, turns: 0, inputTokens: 0, outputTokens: 0 },
-        mcpActivity: ''
+        mcpActivity: '',
+        mcpFinalized: false
       } : {
         mcpSteps: [],
-        mcpActivity: ''
+        mcpActivity: '',
+        mcpFinalized: false
       })
     })
   },
@@ -136,6 +140,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     try {
       const evt = JSON.parse(raw)
       set((s) => {
+        // Ignore events after result event to prevent out-of-order processing
+        if (s.mcpFinalized) return s
         const steps = s.mcpSteps.map((st) => ({ ...st }))
         let stats = s.mcpStats
 
@@ -202,7 +208,14 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         } else if (evt.step === 'text') {
           // Show brief snippet of AI output
           const text = (evt.text || '').replace(/\n/g, ' ').trim()
-          if (text) activity = text.length > 40 ? text.slice(0, 40) + '...' : text
+          if (text) {
+            if (text.length > 40) {
+              const cut = text.slice(0, 41).lastIndexOf(' ')
+              activity = (cut > 0 ? text.slice(0, cut) : text.slice(0, 40)) + '...'
+            } else {
+              activity = text
+            }
+          }
         } else if (evt.step === 'result') {
           activity = ''
           for (const st of steps) { st.status = 'done' }
@@ -213,7 +226,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             outputTokens: evt.outputTokens || 0
           }
           // Result event is the definitive completion signal — stats are final
-          return { mcpSteps: [], mcpStats: stats, mcpActivity: '', isLoading: false }
+          return { mcpSteps: [], mcpStats: stats, mcpActivity: '', isLoading: false, mcpFinalized: true }
         }
 
         return { mcpSteps: steps, mcpStats: stats, mcpActivity: activity }
@@ -348,6 +361,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       mcpStartTime: 0,
       mcpStats: null,
       mcpActivity: '',
+      mcpFinalized: false,
       error: null
     })
   }
