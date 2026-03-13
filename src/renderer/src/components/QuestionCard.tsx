@@ -3,7 +3,11 @@ import type { Question, QuestionOption } from '@/types/agent'
 import { Card } from './ui/Card'
 import { Button } from './ui/Button'
 import { cn } from '@/lib/utils'
-import { explainOptions, type ExplainOptionsResult } from '@/services/openrouter-service'
+import {
+  explainOptions, explainQuestion, type ExplainOptionsResult,
+  EXPLAIN_OPTIONS_SYSTEM, buildExplainOptionsPrompt,
+  EXPLAIN_QUESTION_PROMPT_TEMPLATE
+} from '@/services/openrouter-service'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAgentStore } from '@/stores/agent-store'
 import { useSmartAgentStore } from '@/stores/smart-agent-store'
@@ -33,6 +37,7 @@ const SELECT_ALL_PATTERNS = /以上都要|以上全部|全部都要|都要|all o
 
 // Session-level cache for explain results (keyed by question id)
 const explainCache = new Map<string, ExplainOptionsResult>()
+const questionExplainCache = new Map<string, string>()
 
 function getOptionText(opt: QuestionOption | string): string {
   return typeof opt === 'string' ? opt : opt.text
@@ -64,6 +69,7 @@ function getAnswerSummary(question: Question): string {
 }
 
 export function QuestionCard({ question, index, total, onInsert, onUpdateDocumentAnswer }: QuestionCardProps) {
+  const canExplain = useSettingsStore((s) => !!s.apiKey || s.aiMode === 'mcp')
   const [customInput, setCustomInput] = useState('')
   const [explainResult, setExplainResult] = useState<ExplainOptionsResult | null>(
     () => explainCache.get(question.id) ?? null
@@ -72,6 +78,12 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
   const [visibleCount, setVisibleCount] = useState(0)
   const [showExplain, setShowExplain] = useState(false)
   const abortRef = useRef(false)
+
+  // Explain question state
+  const [questionExplain, setQuestionExplain] = useState<string | null>(
+    () => questionExplainCache.get(question.id) ?? null
+  )
+  const [questionExplaining, setQuestionExplaining] = useState(false)
 
   // Reopen state
   const [reopened, setReopened] = useState(false)
@@ -154,13 +166,33 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
     setVisibleCount(0)
     abortRef.current = false
 
-    const { apiKey, model } = useSettingsStore.getState()
+    const { apiKey, model, aiMode } = useSettingsStore.getState()
     const optionTexts = question.options
       .filter((o) => !isSelectAll(o))
       .map(getOptionText)
 
     try {
-      const result = await explainOptions(question.text, optionTexts, model, apiKey)
+      let result: ExplainOptionsResult
+
+      if (apiKey) {
+        // Use OpenRouter (fast)
+        result = await explainOptions(question.text, optionTexts, model, apiKey)
+      } else if (aiMode === 'mcp') {
+        // Use Claude Code — reuse shared prompt
+        const prompt = `${EXPLAIN_OPTIONS_SYSTEM}\n\n${buildExplainOptionsPrompt(question.text, optionTexts)}`
+
+        const res = await window.api.mcp.ask(prompt)
+        if (!res.success || !res.text) throw new Error(res.error || '解释失败')
+        // Strip markdown code fences before extracting JSON
+        let text = res.text.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+        const start = text.indexOf('{')
+        const end = text.lastIndexOf('}')
+        if (start === -1 || end <= start) throw new Error('无法解析回复')
+        result = JSON.parse(text.slice(start, end + 1)) as ExplainOptionsResult
+      } else {
+        return
+      }
+
       if (abortRef.current) return
 
       explainCache.set(question.id, result)
@@ -178,6 +210,39 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
       setExplaining(false)
     }
   }, [question.id, question.text, question.options])
+
+  const handleExplainQuestion = useCallback(async () => {
+    const cached = questionExplainCache.get(question.id)
+    if (cached) {
+      setQuestionExplain(cached)
+      return
+    }
+
+    setQuestionExplaining(true)
+
+    const { apiKey, model, aiMode } = useSettingsStore.getState()
+    const qPrompt = EXPLAIN_QUESTION_PROMPT_TEMPLATE(question.text, question.category)
+
+    try {
+      let text: string
+      if (apiKey) {
+        text = await explainQuestion(question.text, question.category, model, apiKey)
+      } else if (aiMode === 'mcp') {
+        const res = await window.api.mcp.ask(qPrompt)
+        if (!res.success || !res.text) throw new Error(res.error || '解释失败')
+        text = res.text
+      } else {
+        return
+      }
+
+      questionExplainCache.set(question.id, text)
+      setQuestionExplain(text)
+    } catch (err) {
+      console.error('[explain-question] error:', err)
+    } finally {
+      setQuestionExplaining(false)
+    }
+  }, [question.id, question.text, question.category])
 
   const collapseExplain = () => {
     setShowExplain(false)
@@ -244,6 +309,24 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
     pred?: typeof prediction
   ) => (
     <>
+      {/* Explain button (requires API key) */}
+      {canExplain && (
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={handleExplain}
+            disabled={explaining}
+            className={cn(
+              'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
+              explaining
+                ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
+                : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
+            )}
+          >
+            {explaining ? '> 分析中...' : '> 解释选项'}
+          </button>
+        </div>
+      )}
+
       {/* Options */}
       <div className="space-y-2 mb-3">
         {question.options!.map((option, i) => {
@@ -474,32 +557,44 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
 
       <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">{question.text}</h3>
 
-      {/* Action buttons: explain (choice only) + add to doc — single row */}
+      {/* Action buttons: explain question + add to doc — single row */}
       <div className="flex gap-2 mb-4">
-        {isMultipleChoice && (
+        {canExplain && (
           <button
-            onClick={handleExplain}
-            disabled={explaining}
+            onClick={handleExplainQuestion}
+            disabled={questionExplaining}
             className={cn(
               'flex-1 px-3 py-1.5 rounded border border-dashed text-sm transition-colors cursor-pointer font-mono',
-              explaining
+              questionExplaining
                 ? 'border-accent-blue/30 text-accent-blue/60 cursor-wait'
                 : 'border-text-muted text-text-muted hover:border-accent-blue hover:text-accent-blue'
             )}
           >
-            {explaining ? '> 分析中...' : '> 解释选项'}
+            {questionExplaining ? '> 分析中...' : '> 解释问题'}
           </button>
         )}
         <button
           onClick={handleInsertQuestion}
           className={cn(
             'px-3 py-1.5 rounded border border-dashed border-text-muted text-sm text-text-muted hover:border-accent-green hover:text-accent-green transition-colors cursor-pointer font-mono',
-            isMultipleChoice ? 'flex-1' : 'w-full'
+            canExplain ? 'flex-1' : 'w-full'
           )}
         >
           &gt; 添加到文档 _
         </button>
       </div>
+
+      {questionExplain && (
+        <div className="mb-4 px-3 py-2 rounded bg-bg-tertiary border border-border/50 animate-fadeIn">
+          <p className="text-xs text-text-secondary leading-relaxed">{questionExplain}</p>
+          <button
+            onClick={() => setQuestionExplain(null)}
+            className="mt-1 text-xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer font-mono"
+          >
+            收起
+          </button>
+        </div>
+      )}
 
       {isMultipleChoice && renderOptionsList(
         (opt) => resolveOption(opt, insertQA),

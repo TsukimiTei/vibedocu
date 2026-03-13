@@ -35,6 +35,7 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings, onRename }: Ed
   const { filePath, content, isDirty, createdAt, lastEdited, lastSaved, activePageIndex } = useDocumentStore()
   const isLoading = useAgentStore((s) => s.isLoading)
   const sessions = useAgentStore((s) => s.sessions)
+  const aiMode = useSettingsStore((s) => s.aiMode)
   const pageOrderReversed = useSettingsStore((s) => s.pageOrderReversed)
   const togglePageOrder = useSettingsStore((s) => s.togglePageOrder)
 
@@ -272,7 +273,7 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings, onRename }: Ed
             disabled={isLoading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-accent-blue/30 bg-accent-blue/20 text-accent-blue text-[13px] font-mono hover:bg-accent-blue/30 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Analyzing...' : 'Update'}
+            {isLoading ? 'Analyzing...' : aiMode === 'mcp' ? 'Update (MCP)' : 'Update'}
             <kbd className="px-1 py-0.5 rounded bg-accent-blue/20 text-[10px] font-mono text-accent-blue/70">⌘↵</kbd>
           </button>
       </div>

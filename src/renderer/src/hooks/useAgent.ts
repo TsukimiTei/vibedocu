@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useAgentStore } from '@/stores/agent-store'
 import { useDocumentStore } from '@/stores/document-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -82,10 +82,87 @@ async function loadPageImages(
 }
 
 export function useAgent() {
-  const { apiKey, model } = useSettingsStore()
-  const { setLoading, setError, addSession, isLoading } = useAgentStore()
+  const { apiKey, model, aiMode } = useSettingsStore()
+  const { setLoading, setError, addSession, pushMcpEvent, isLoading } = useAgentStore()
+
+  // Pre-warm claude process when in MCP mode with current doc
+  useEffect(() => {
+    if (aiMode === 'mcp' && window.api.mcp.warmup) {
+      const docPath = useDocumentStore.getState().filePath
+      window.api.mcp.warmup(docPath || undefined).catch(() => {})
+    }
+  }, [aiMode])
 
   const runAnalysis = useCallback(async () => {
+    if (aiMode === 'mcp') {
+      const { content, activePageIndex, filePath } = useDocumentStore.getState()
+      if (!filePath) {
+        setError('请先保存文档')
+        return
+      }
+      const pageContent = getPageContent(content, activePageIndex)
+      if (!pageContent.trim()) {
+        setError('当前页面内容为空')
+        return
+      }
+
+      const hasHistory = useAgentStore.getState().sessions.some((s) => s.pageIndex === activePageIndex)
+      setLoading(true, hasHistory)
+      try {
+        // Save before analyzing to ensure latest content is on disk
+        if (useDocumentStore.getState().isDirty) {
+          await window.api.file.write(filePath, content)
+          useDocumentStore.getState().markSaved()
+        }
+
+        const projectDir = getProjectDir(filePath)
+
+        const prompt = hasHistory
+          ? `用户更新了文档，请重新分析 ${filePath} 的第 ${activePageIndex} 页。
+
+步骤：
+1. 调用 vibedocs_open_document 读取最新文档内容（你已有分析框架和项目上下文，无需重新获取）
+2. 对比之前的分析，关注文档的变化和改进
+3. 根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个新问题和更新的完成度评分
+4. 调用 vibedocs_save_analysis 保存分析结果
+
+直接执行，不要解释。`
+          : `使用 vibedocs MCP 工具分析文档 ${filePath} 的第 ${activePageIndex} 页。
+
+步骤：
+1. 调用 vibedocs_get_analysis_schema 获取分析框架
+2. 调用 vibedocs_open_document 读取文档内容
+3. 调用 vibedocs_scan_project 扫描项目目录 ${projectDir}，了解项目结构
+4. 如果有相关代码文件，调用 vibedocs_read_project_files 读取关键文件
+5. 结合文档内容和项目上下文，根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个问题和完成度评分
+6. 调用 vibedocs_save_analysis 保存分析结果
+
+直接执行，不要解释。`
+
+        const unsubProgress = window.api.mcp.onProgress((chunk: string) => {
+          pushMcpEvent(chunk)
+        })
+        try {
+          const result = await window.api.mcp.analyze(prompt, filePath)
+          if (!result.success) {
+            setError(result.error || 'Claude Code 分析失败')
+          }
+        } finally {
+          unsubProgress()
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'MCP 分析失败'
+        setError(message)
+      } finally {
+        // _loadRaw handles isLoading via agent:changed event.
+        // Fallback: if still loading after 30s (e.g. save_analysis failed), force stop.
+        setTimeout(() => {
+          if (useAgentStore.getState().isLoading) setLoading(false)
+        }, 30_000)
+      }
+      return
+    }
+
     if (!apiKey) {
       setError('Please set your OpenRouter API key in settings')
       return
@@ -252,11 +329,12 @@ export function useAgent() {
       const message = err instanceof Error ? err.message : 'Failed to analyze document'
       setError(message)
     }
-  }, [apiKey, model, setLoading, setError, addSession])
+  }, [aiMode, apiKey, model, setLoading, setError, addSession])
 
   const refreshContext = useCallback(async () => {
     const { filePath, content, activePageIndex } = useDocumentStore.getState()
-    if (!filePath || !apiKey) return
+    if (!filePath) return
+    if (aiMode !== 'mcp' && !apiKey) return
 
     const projectDir = getProjectDir(filePath)
     const pageContent = getPageContent(content, activePageIndex)
@@ -311,9 +389,61 @@ export function useAgent() {
     } finally {
       useContextStore.getState().setScanning(false)
     }
-  }, [apiKey, model])
+  }, [aiMode, apiKey, model])
 
   const runPartialAnalysis = useCallback(async (selectedText: string, customQuestion?: string) => {
+    if (aiMode === 'mcp') {
+      const { filePath, content, activePageIndex } = useDocumentStore.getState()
+      if (!filePath) {
+        setError('请先保存文档')
+        return
+      }
+
+      setLoading(true)
+      try {
+        if (useDocumentStore.getState().isDirty) {
+          await window.api.file.write(filePath, content)
+          useDocumentStore.getState().markSaved()
+        }
+
+        const partialProjectDir = getProjectDir(filePath)
+        const prompt = `使用 vibedocs MCP 工具分析文档 ${filePath} 第 ${activePageIndex} 页中的选中文字。
+
+选中内容："${selectedText}"
+${customQuestion ? `用户问题：${customQuestion}` : ''}
+
+步骤：
+1. 调用 vibedocs_get_analysis_schema 获取分析框架
+2. 调用 vibedocs_open_document 读取完整文档上下文
+3. 调用 vibedocs_scan_project 扫描项目目录 ${partialProjectDir}，了解项目结构
+4. 如果有相关代码文件，调用 vibedocs_read_project_files 读取关键文件
+5. 以选中文字为焦点，结合项目上下文进行分析
+6. 调用 vibedocs_save_analysis 保存分析结果
+
+直接执行，不要解释。`
+
+        const unsubPartialProgress = window.api.mcp.onProgress((chunk: string) => {
+          pushMcpEvent(chunk)
+        })
+        try {
+          const result = await window.api.mcp.analyze(prompt, filePath)
+          if (!result.success) {
+            setError(result.error || 'Claude Code 分析失败')
+          }
+        } finally {
+          unsubPartialProgress()
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'MCP 分析失败'
+        setError(message)
+      } finally {
+        setTimeout(() => {
+          if (useAgentStore.getState().isLoading) setLoading(false)
+        }, 3000)
+      }
+      return
+    }
+
     if (!apiKey) {
       setError('Please set your OpenRouter API key in settings')
       return
@@ -340,7 +470,7 @@ export function useAgent() {
       const message = err instanceof Error ? err.message : 'Failed to analyze selected text'
       setError(message)
     }
-  }, [apiKey, model, setLoading, setError, addSession])
+  }, [aiMode, apiKey, model, setLoading, setError, addSession])
 
   const runAutoAnswer = useCallback(
     (onInsert: (text: string) => void) => {

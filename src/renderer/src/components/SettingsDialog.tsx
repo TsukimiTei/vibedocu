@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { ModelSelector } from './ModelSelector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useSmartAgentStore } from '@/stores/smart-agent-store'
 import { useDocumentStore } from '@/stores/document-store'
-import { chooseDirectory } from '@/services/file-bridge'
+import { chooseDirectory, registerMcpServer, getMcpStatus } from '@/services/file-bridge'
 import { relearnStyle } from '@/services/style-service'
 import { cn } from '@/lib/utils'
+import { toast } from './ui/Toast'
 import type { ThemeId } from '@/types/settings'
 import type { SmartAgentMode } from '@/types/smart-agent'
 
@@ -21,8 +22,14 @@ const themes: { id: ThemeId; name: string; preview: string }[] = [
   { id: 'warm-light', name: 'Warm Light', preview: '#fdf6e3' }
 ]
 
+const aiModes = [
+  { id: 'openrouter' as const, name: 'OpenRouter', desc: 'API Key 调用云端模型' },
+  { id: 'mcp' as const, name: 'Claude Code', desc: '通过 MCP 协议，无需 API Key' }
+]
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const {
+    aiMode, setAiMode,
     apiKey, setApiKey, theme, setTheme,
     obsidianVaultPath, setObsidianVaultPath,
     projectDir, setProjectDir,
@@ -32,6 +39,26 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   } = useSettingsStore()
   const isLearning = useSmartAgentStore((s) => s.isLearning)
   const [tempKey, setTempKey] = useState(apiKey)
+  const [mcpRegistered, setMcpRegistered] = useState(false)
+  const [mcpRegistering, setMcpRegistering] = useState(false)
+
+  useEffect(() => {
+    if (open && aiMode === 'mcp') {
+      getMcpStatus().then((s) => setMcpRegistered(s.registered))
+    }
+  }, [open, aiMode])
+
+  const handleRegisterMcp = async () => {
+    setMcpRegistering(true)
+    const result = await registerMcpServer()
+    setMcpRegistering(false)
+    if (result.success) {
+      setMcpRegistered(true)
+      toast('已注册到 Claude Code，重启 Claude Code 生效', 'success')
+    } else {
+      toast(`注册失败: ${result.error}`, 'error')
+    }
+  }
 
   const handleSave = () => {
     setApiKey(tempKey.trim())
@@ -77,22 +104,72 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     <Dialog open={open} onClose={onClose} title="Settings">
       <div className="space-y-4">
         <div>
-          <label className="block text-xs text-text-muted mb-1.5">
-            OpenRouter API Key
-          </label>
-          <input
-            type="password"
-            value={tempKey}
-            onChange={(e) => setTempKey(e.target.value)}
-            placeholder="sk-or-..."
-            className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-xs text-text-primary outline-none focus:border-accent-blue/50 placeholder:text-text-muted font-mono"
-          />
-          <p className="text-[10px] text-text-muted mt-1">
-            Get your key at openrouter.ai/keys
-          </p>
+          <label className="block text-xs text-text-muted mb-1.5">AI Mode</label>
+          <div className="flex gap-2">
+            {aiModes.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setAiMode(m.id)}
+                className={`flex-1 px-3 py-2 rounded border text-xs transition-colors cursor-pointer ${
+                  aiMode === m.id
+                    ? 'border-accent-blue text-text-primary bg-accent-blue/10'
+                    : 'border-border text-text-secondary hover:border-border-focus'
+                }`}
+              >
+                <div className="font-medium">{m.name}</div>
+                <div className="text-[10px] text-text-muted mt-0.5">{m.desc}</div>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <ModelSelector />
+        {aiMode === 'openrouter' && (
+          <>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">
+                OpenRouter API Key
+              </label>
+              <input
+                type="password"
+                value={tempKey}
+                onChange={(e) => setTempKey(e.target.value)}
+                placeholder="sk-or-..."
+                className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-xs text-text-primary outline-none focus:border-accent-blue/50 placeholder:text-text-muted font-mono"
+              />
+              <p className="text-[10px] text-text-muted mt-1">
+                Get your key at openrouter.ai/keys
+              </p>
+            </div>
+
+            <ModelSelector />
+          </>
+        )}
+
+        {aiMode === 'mcp' && (
+          <div className="rounded-lg border border-accent-blue/20 bg-accent-blue/5 px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${mcpRegistered ? 'bg-accent-green' : 'bg-accent-orange'}`} />
+                <span className="text-xs text-text-secondary">
+                  {mcpRegistered ? 'Claude Code 已连接' : 'Claude Code 未连接'}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant={mcpRegistered ? 'ghost' : 'primary'}
+                onClick={handleRegisterMcp}
+                disabled={mcpRegistering}
+              >
+                {mcpRegistering ? '注册中...' : mcpRegistered ? '重新注册' : '一键连接'}
+              </Button>
+            </div>
+            <p className="text-[10px] text-text-muted leading-relaxed">
+              {mcpRegistered
+                ? '点击 Update 即可自动调用 Claude Code 分析文档，结果自动同步回来。'
+                : '点击「一键连接」将 VibeDocs MCP Server 注册到 Claude Code。注册后重启 Claude Code 生效。'}
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">

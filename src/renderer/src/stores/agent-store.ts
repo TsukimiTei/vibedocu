@@ -2,21 +2,64 @@ import { create } from 'zustand'
 import type { Question, CompletenessScore, AgentSession } from '@/types/agent'
 import { generateId } from '@/lib/utils'
 
+export interface McpStep {
+  id: string
+  label: string
+  status: 'pending' | 'running' | 'done'
+}
+
+export interface McpStats {
+  durationMs: number
+  turns: number
+  inputTokens: number
+  outputTokens: number
+}
+
+const MCP_PIPELINE_FULL: { id: string; label: string }[] = [
+  { id: 'schema', label: '加载分析框架' },
+  { id: 'read', label: '读取文档' },
+  { id: 'scan', label: '扫描项目文件' },
+  { id: 'readfiles', label: '读取项目文件' },
+  { id: 'analyze', label: 'AI 分析中' },
+  { id: 'save', label: '保存分析结果' }
+]
+
+const MCP_PIPELINE_RESUME: { id: string; label: string }[] = [
+  { id: 'read', label: '读取最新文档' },
+  { id: 'analyze', label: 'AI 分析中' },
+  { id: 'save', label: '保存分析结果' }
+]
+
+// Map tool names to pipeline step ids
+const TOOL_TO_STEP: Record<string, string> = {
+  '加载分析框架': 'schema',
+  '读取文档': 'read',
+  '扫描项目文件': 'scan',
+  '读取项目文件': 'readfiles',
+  '保存分析结果': 'save'
+}
+
 interface AgentStore {
   sessions: AgentSession[]
   currentQuestions: Question[]
   completeness: CompletenessScore | null
   isLoading: boolean
+  mcpSteps: McpStep[]
+  mcpStartTime: number
+  mcpStats: McpStats | null
+  mcpActivity: string
   error: string | null
 
-  setLoading: (loading: boolean) => void
+  setLoading: (loading: boolean, resume?: boolean) => void
   setError: (error: string | null) => void
+  pushMcpEvent: (raw: string) => void
   addSession: (questions: Omit<Question, 'id' | 'answered'>[], completeness: CompletenessScore, pageIndex: number) => void
   markAnswered: (questionId: string, answer: string) => void
   updateAnswer: (questionId: string, answer: string) => void
   switchToPage: (pageIndex: number) => void
   clearCurrent: () => void
   loadFromFile: (docPath: string) => Promise<void>
+  _loadRaw: (raw: string) => void
   reset: () => void
 }
 
@@ -60,9 +103,123 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   currentQuestions: [],
   completeness: null,
   isLoading: false,
+  mcpSteps: [],
+  mcpStartTime: 0,
+  mcpStats: null,
+  mcpActivity: '',
   error: null,
 
-  setLoading: (loading) => set({ isLoading: loading, error: null }),
+  setLoading: (loading, resume) => {
+    if (!loading) {
+      set({ isLoading: false, mcpSteps: [], mcpActivity: '' })
+      return
+    }
+    // Only initialize MCP pipeline state when in MCP mode
+    const isMcp = typeof resume === 'boolean'
+    set({
+      isLoading: true,
+      error: null,
+      ...(isMcp ? {
+        mcpSteps: (resume ? MCP_PIPELINE_RESUME : MCP_PIPELINE_FULL).map((s, i) => ({
+          ...s, status: (i === 0 ? 'running' : 'pending') as McpStep['status']
+        })),
+        mcpStartTime: Date.now(),
+        mcpStats: { durationMs: 0, turns: 0, inputTokens: 0, outputTokens: 0 },
+        mcpActivity: ''
+      } : {
+        mcpSteps: [],
+        mcpActivity: ''
+      })
+    })
+  },
+  pushMcpEvent: (raw) => {
+    try {
+      const evt = JSON.parse(raw)
+      set((s) => {
+        const steps = s.mcpSteps.map((st) => ({ ...st }))
+        let stats = s.mcpStats
+
+        // Helper: mark a step by id (never regress from done)
+        const mark = (id: string, status: McpStep['status']) => {
+          const idx = steps.findIndex((st) => st.id === id)
+          if (idx >= 0 && !(steps[idx].status === 'done' && status !== 'done')) {
+            steps[idx].status = status
+          }
+        }
+
+        let activity = s.mcpActivity
+
+        const DATA_STEP_IDS = ['schema', 'read', 'scan', 'readfiles']
+
+        // Check if all data-gathering tools are done
+        // Steps not in the current pipeline are treated as done (e.g. resume mode skips schema/scan)
+        const stepDone = (id: string) => {
+          const st = steps.find((s) => s.id === id)
+          return !st || st.status === 'done'
+        }
+        const stepNotRunning = (id: string) => {
+          const st = steps.find((s) => s.id === id)
+          return !st || st.status !== 'running'
+        }
+        const dataGatheringDone = () =>
+          stepDone('schema') && stepDone('read') && stepNotRunning('scan') && stepNotRunning('readfiles')
+
+        // When analyze starts, mark skipped data steps as done so no pending dots above running
+        const startAnalyze = () => {
+          for (const id of DATA_STEP_IDS) {
+            const st = steps.find((s) => s.id === id)
+            if (st && st.status === 'pending') st.status = 'done'
+          }
+          mark('analyze', 'running')
+        }
+
+        if (evt.step === 'tool') {
+          const stepId = TOOL_TO_STEP[evt.name]
+          if (!stepId) return s
+
+          if (evt.status === 'running') {
+            mark(stepId, 'running')
+            activity = evt.name
+          } else if (evt.status === 'done') {
+            mark(stepId, 'done')
+            if (dataGatheringDone()) {
+              startAnalyze()
+            }
+            activity = ''
+            if (stepId === 'save') {
+              mark('analyze', 'done')
+            }
+          }
+        } else if (evt.step === 'tokens') {
+          stats = {
+            ...(stats || { durationMs: 0, turns: 0 }),
+            inputTokens: evt.inputTokens || 0,
+            outputTokens: evt.outputTokens || 0
+          }
+        } else if (evt.step === 'thinking') {
+          activity = '思考中...'
+          if (dataGatheringDone()) startAnalyze()
+        } else if (evt.step === 'text') {
+          // Show brief snippet of AI output
+          const text = (evt.text || '').replace(/\n/g, ' ').trim()
+          if (text) activity = text.length > 40 ? text.slice(0, 40) + '...' : text
+        } else if (evt.step === 'result') {
+          activity = ''
+          for (const st of steps) { st.status = 'done' }
+          stats = {
+            durationMs: evt.durationMs || 0,
+            turns: evt.turns || 0,
+            inputTokens: evt.inputTokens || 0,
+            outputTokens: evt.outputTokens || 0
+          }
+          // Result event is the definitive completion signal — stats are final
+          return { mcpSteps: [], mcpStats: stats, mcpActivity: '', isLoading: false }
+        }
+
+        return { mcpSteps: steps, mcpStats: stats, mcpActivity: activity }
+      })
+    } catch { /* ignore */ }
+  },
   setError: (error) => set({ error, isLoading: false }),
 
   addSession: (rawQuestions, completeness, pageIndex) => {
@@ -128,6 +285,27 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     try {
       const raw = await window.api.agent.read(docPath)
       if (!raw) return
+      get()._loadRaw(raw)
+    } catch {
+      // Corrupted file — ignore
+    }
+
+    // Start watching for MCP changes
+    if (window.api.agent.watch) {
+      // Clean up previous listener BEFORE setting up new watcher
+      if ((window as any).__vibedocu_agentUnwatch) {
+        (window as any).__vibedocu_agentUnwatch()
+        (window as any).__vibedocu_agentUnwatch = null
+      }
+      await window.api.agent.watch(docPath)
+      ;(window as any).__vibedocu_agentUnwatch = window.api.agent.onChanged((data: string) => {
+        get()._loadRaw(data)
+      })
+    }
+  },
+
+  _loadRaw: (raw: string) => {
+    try {
       const sessions: AgentSession[] = JSON.parse(raw)
       if (!Array.isArray(sessions) || sessions.length === 0) return
       // Migrate old string[] options to QuestionOption[] format
@@ -142,14 +320,21 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       }
       // Restore latest session as current view
       const latest = sessions[sessions.length - 1]
-      set({
+      const update: Partial<AgentStore> = {
         sessions,
         currentQuestions: latest.questions,
         completeness: latest.completeness,
         error: null
-      })
+      }
+      // Only clear isLoading if we're in MCP mode (watcher-driven).
+      // Don't clobber OpenRouter's loading state.
+      const current = get()
+      if (current.isLoading && current.mcpSteps.length > 0) {
+        update.isLoading = false
+      }
+      set(update)
     } catch {
-      // Corrupted file — ignore
+      // Corrupted data — ignore
     }
   },
 
@@ -159,6 +344,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       currentQuestions: [],
       completeness: null,
       isLoading: false,
+      mcpSteps: [],
+      mcpStartTime: 0,
+      mcpStats: null,
+      mcpActivity: '',
       error: null
     })
   }
