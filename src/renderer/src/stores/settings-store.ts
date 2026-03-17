@@ -114,6 +114,20 @@ export const useSettingsStore = create<SettingsStore>()(
     {
       name: 'vibedocu-settings',
       storage: createJSONStorage(() => fileStorage),
+      partialize: (state) => ({
+        aiMode: state.aiMode,
+        apiKey: state.apiKey,
+        model: state.model,
+        theme: state.theme,
+        hasSeenOnboarding: state.hasSeenOnboarding,
+        recentFiles: state.recentFiles,
+        obsidianVaultPath: state.obsidianVaultPath,
+        pageOrderReversed: state.pageOrderReversed,
+        docProjectDirs: state.docProjectDirs,
+        smartAgentMode: state.smartAgentMode,
+        styleHistoryDir: state.styleHistoryDir
+        // projectDir intentionally excluded — per-window runtime state
+      }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) applyTheme(state.theme)
       }

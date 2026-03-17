@@ -63,6 +63,94 @@
   --theme-heading: #2a2015;
 }
 
+/* ===== Sage Theme ===== */
+[data-theme="sage"] {
+  --theme-bg-primary: #f4f7f4;
+  --theme-bg-secondary: #eaf0ea;
+  --theme-bg-tertiary: #dfe8df;
+  --theme-bg-hover: #d4ddd4;
+  --theme-border: #c2cfc2;
+  --theme-border-focus: #a8bba8;
+  --theme-text-primary: #2d3a2d;
+  --theme-text-secondary: #5a6b5a;
+  --theme-text-muted: #8a9b8a;
+  --theme-accent-green: #3d8b40;
+  --theme-accent-blue: #4a7fb5;
+  --theme-accent-orange: #c47f2e;
+  --theme-accent-red: #c04040;
+  --theme-accent-purple: #7a5dab;
+  --theme-scrollbar: #c2cfc2;
+  --theme-scrollbar-hover: #a8bba8;
+  --theme-selection: rgba(61, 139, 64, 0.15);
+  --theme-heading: #1a2a1a;
+}
+
+/* ===== Ocean Mist Theme ===== */
+[data-theme="ocean"] {
+  --theme-bg-primary: #f2f6fa;
+  --theme-bg-secondary: #e8eff6;
+  --theme-bg-tertiary: #dce6f0;
+  --theme-bg-hover: #d0dce8;
+  --theme-border: #bccbdb;
+  --theme-border-focus: #a3b8cc;
+  --theme-text-primary: #1e2d3d;
+  --theme-text-secondary: #4a6178;
+  --theme-text-muted: #7a92a8;
+  --theme-accent-green: #2e8b57;
+  --theme-accent-blue: #3a7cc0;
+  --theme-accent-orange: #d48530;
+  --theme-accent-red: #c44040;
+  --theme-accent-purple: #7b5ea7;
+  --theme-scrollbar: #bccbdb;
+  --theme-scrollbar-hover: #a3b8cc;
+  --theme-selection: rgba(58, 124, 192, 0.15);
+  --theme-heading: #142030;
+}
+
+/* ===== Dusty Rose Theme ===== */
+[data-theme="rose"] {
+  --theme-bg-primary: #faf4f6;
+  --theme-bg-secondary: #f5ecef;
+  --theme-bg-tertiary: #ede2e6;
+  --theme-bg-hover: #e5d8dc;
+  --theme-border: #d6c5cb;
+  --theme-border-focus: #c7b0b8;
+  --theme-text-primary: #3d2830;
+  --theme-text-secondary: #6b4f58;
+  --theme-text-muted: #9b7e88;
+  --theme-accent-green: #4a8b60;
+  --theme-accent-blue: #5a7db0;
+  --theme-accent-orange: #c87a3a;
+  --theme-accent-red: #c04a5a;
+  --theme-accent-purple: #8a5a9a;
+  --theme-scrollbar: #d6c5cb;
+  --theme-scrollbar-hover: #c7b0b8;
+  --theme-selection: rgba(192, 74, 90, 0.15);
+  --theme-heading: #2a1520;
+}
+
+/* ===== Lavender Theme ===== */
+[data-theme="lavender"] {
+  --theme-bg-primary: #f6f4fa;
+  --theme-bg-secondary: #eeeaf5;
+  --theme-bg-tertiary: #e4dfed;
+  --theme-bg-hover: #dad4e5;
+  --theme-border: #cac2d6;
+  --theme-border-focus: #b5abc7;
+  --theme-text-primary: #302838;
+  --theme-text-secondary: #5a4f6b;
+  --theme-text-muted: #8a7e9b;
+  --theme-accent-green: #4a8b5a;
+  --theme-accent-blue: #5a78b5;
+  --theme-accent-orange: #c48040;
+  --theme-accent-red: #c04a55;
+  --theme-accent-purple: #7a55a5;
+  --theme-scrollbar: #cac2d6;
+  --theme-scrollbar-hover: #b5abc7;
+  --theme-selection: rgba(122, 85, 165, 0.15);
+  --theme-heading: #1a1525;
+}
+
 @layer base {
   *, *::before, *::after {
     margin: 0;

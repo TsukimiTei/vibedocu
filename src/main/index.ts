@@ -10,12 +10,16 @@ process.on('unhandledRejection', (err) => {
   console.error('[Main] Unhandled rejection:', err)
 })
 
-import { app, BrowserWindow, shell, Menu } from 'electron'
+import { app, BrowserWindow, shell, Menu, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { initAutoUpdater } from './auto-updater'
 import { destroyAllPtySessions } from './pty-service'
+
+let isQuitting = false
+let pendingQuitCount = 0
+const closingWindows = new Set<number>()
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -31,6 +35,16 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  win.on('close', (e) => {
+    if (closingWindows.has(win.id)) {
+      closingWindows.delete(win.id)
+      return
+    }
+    e.preventDefault()
+    // Ask renderer to auto-save, then we handle confirmation
+    win.webContents.send('window:before-close', isQuitting)
   })
 
   win.on('ready-to-show', () => {
@@ -79,13 +93,70 @@ app.whenReady().then(() => {
   buildAppMenu()
   createWindow()
 
+  // Renderer signals save is done — show confirm or close directly
+  ipcMain.on('window:close-ready', (event, skipConfirm: boolean, saved: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) {
+      if (isQuitting) finishQuitWindow()
+      return
+    }
+
+    if (skipConfirm) {
+      closingWindows.add(win.id)
+      win.close()
+      if (isQuitting) finishQuitWindow()
+      return
+    }
+
+    const detail = saved
+      ? '文档已自动保存。'
+      : '文档保存失败，关闭后未保存的更改将丢失。'
+
+    const result = dialog.showMessageBoxSync(win, {
+      type: saved ? 'question' : 'warning',
+      buttons: ['关闭窗口', '取消'],
+      defaultId: saved ? 0 : 1,
+      cancelId: 1,
+      title: '关闭确认',
+      message: '确认要关闭此窗口吗？',
+      detail
+    })
+
+    if (result === 0) {
+      closingWindows.add(win.id)
+      win.close()
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-app.on('before-quit', () => {
+function finishQuitWindow(): void {
+  pendingQuitCount--
+  if (pendingQuitCount <= 0) {
+    app.quit()
+  }
+}
+
+app.on('before-quit', (e) => {
+  if (isQuitting) return // already handled, let quit proceed
+  e.preventDefault()
+  isQuitting = true
   destroyAllPtySessions()
+
+  const windows = BrowserWindow.getAllWindows()
+  if (windows.length === 0) {
+    app.quit()
+    return
+  }
+
+  // Wait for each window to save before quitting
+  pendingQuitCount = windows.length
+  for (const win of windows) {
+    win.webContents.send('window:before-close', true)
+  }
 })
 
 app.on('window-all-closed', () => {

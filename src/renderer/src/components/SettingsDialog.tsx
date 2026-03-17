@@ -19,7 +19,11 @@ interface SettingsDialogProps {
 
 const themes: { id: ThemeId; name: string; preview: string }[] = [
   { id: 'dark', name: 'Terminal Dark', preview: '#0a0a0a' },
-  { id: 'warm-light', name: 'Warm Light', preview: '#fdf6e3' }
+  { id: 'warm-light', name: 'Warm Light', preview: '#fdf6e3' },
+  { id: 'sage', name: 'Sage', preview: '#f4f7f4' },
+  { id: 'ocean', name: 'Ocean Mist', preview: '#f2f6fa' },
+  { id: 'rose', name: 'Dusty Rose', preview: '#faf4f6' },
+  { id: 'lavender', name: 'Lavender', preview: '#f6f4fa' }
 ]
 
 const aiModes = [
@@ -280,12 +284,12 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">Theme</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {themes.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTheme(t.id)}
-                className={`flex-1 flex items-center gap-2 px-3 py-2 rounded border text-xs transition-colors cursor-pointer ${
+                className={`flex items-center gap-2 px-3 py-2 rounded border text-xs transition-colors cursor-pointer ${
                   theme === t.id
                     ? 'border-accent-blue text-text-primary bg-accent-blue/10'
                     : 'border-border text-text-secondary hover:border-border-focus'

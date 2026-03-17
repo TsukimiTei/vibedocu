@@ -1,4 +1,4 @@
-export type ThemeId = 'dark' | 'warm-light'
+export type ThemeId = 'dark' | 'warm-light' | 'sage' | 'ocean' | 'rose' | 'lavender'
 
 export interface Settings {
   apiKey: string

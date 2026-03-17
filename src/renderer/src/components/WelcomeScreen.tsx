@@ -11,10 +11,20 @@ interface WelcomeScreenProps {
   onCreateNew?: () => void
 }
 
+function getDirName(filePath: string): string {
+  const parts = filePath.split('/')
+  parts.pop()
+  return parts.join('/') || '/'
+}
+
 export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
   const { openExisting, openRecent, createNew } = useFileOps()
-  const { recentFiles, removeRecentFile, projectDir, setProjectDir, docProjectDirs } =
-    useSettingsStore()
+  const {
+    recentFiles, removeRecentFile,
+    projectDir, setProjectDir,
+    docProjectDirs,
+    obsidianVaultPath
+  } = useSettingsStore()
   const isScanning = useContextStore((s) => s.isScanning)
   const [scanCount, setScanCount] = useState<number | null>(() => {
     const store = useContextStore.getState()
@@ -63,66 +73,80 @@ export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
           </p>
         </div>
 
-        {/* Step 1: Project Directory */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-              项目目录
-            </label>
-            {!projectDir && (
-              <span className="text-[10px] text-text-muted">
-                可稍后在 Settings 中设置
-              </span>
+        {/* Workspace info: project dir + obsidian vault */}
+        <div className="mb-6 space-y-2">
+          {/* Project Directory */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                项目目录
+              </label>
+              {!projectDir && (
+                <span className="text-[10px] text-text-muted">
+                  可稍后在 Settings 中设置
+                </span>
+              )}
+            </div>
+
+            {projectDir ? (
+              <div className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-2">
+                <span className="text-accent-green text-xs shrink-0">&#9632;</span>
+                <span className="text-xs text-text-secondary font-mono truncate flex-1">
+                  {shortenPath(projectDir)}
+                </span>
+                {isScanning && (
+                  <span className="text-[10px] text-accent-blue animate-pulse shrink-0">
+                    扫描中...
+                  </span>
+                )}
+                {!isScanning && scanCount !== null && (
+                  <span className="text-[10px] text-text-muted shrink-0">
+                    {scanCount} 文件
+                  </span>
+                )}
+                <Button size="sm" variant="ghost" onClick={handleChooseProjectDir} className="shrink-0 !px-2 !py-1">
+                  变更
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setProjectDir('')
+                    setScanCount(null)
+                  }}
+                  className="shrink-0 !px-2 !py-1 hover:!text-accent-red"
+                >
+                  清除
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={handleChooseProjectDir}
+                className="w-full"
+              >
+                选择项目目录
+              </Button>
             )}
+            <p className="text-[10px] text-text-muted mt-1">
+              Agent 将读取此目录获取项目 context，帮你提出更有针对性的问题
+            </p>
           </div>
 
-          {projectDir ? (
-            <div className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-2.5">
-              <span className="text-accent-green text-xs shrink-0">&#9632;</span>
+          {/* Obsidian Vault */}
+          {obsidianVaultPath && (
+            <div className="flex items-center gap-2 bg-bg-tertiary border border-border rounded px-3 py-2">
+              <span className="text-accent-purple text-xs shrink-0">&#9830;</span>
+              <span className="text-[10px] text-text-muted shrink-0">Obsidian</span>
               <span className="text-xs text-text-secondary font-mono truncate flex-1">
-                {shortenPath(projectDir)}
+                {shortenPath(obsidianVaultPath)}
               </span>
-              {isScanning && (
-                <span className="text-[10px] text-accent-blue animate-pulse shrink-0">
-                  扫描中...
-                </span>
-              )}
-              {!isScanning && scanCount !== null && (
-                <span className="text-[10px] text-text-muted shrink-0">
-                  {scanCount} 文件
-                </span>
-              )}
-              <Button size="sm" variant="ghost" onClick={handleChooseProjectDir} className="shrink-0 !px-2 !py-1">
-                变更
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setProjectDir('')
-                  setScanCount(null)
-                }}
-                className="shrink-0 !px-2 !py-1 hover:!text-accent-red"
-              >
-                清除
-              </Button>
             </div>
-          ) : (
-            <Button
-              variant="secondary"
-              size="lg"
-              onClick={handleChooseProjectDir}
-              className="w-full"
-            >
-              选择项目目录
-            </Button>
           )}
-          <p className="text-[10px] text-text-muted mt-1.5">
-            Agent 将读取此目录获取项目 context，帮你提出更有针对性的问题
-          </p>
         </div>
 
-        {/* Step 2: Open / Create MD */}
+        {/* Open / Create MD */}
         <div className="flex gap-3 mb-8">
           <Button variant="primary" size="lg" onClick={openExisting} className="flex-1">
             Open .md File
@@ -141,21 +165,27 @@ export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
             <div className="space-y-1">
               {recentFiles.map((file) => {
                 const boundDir = docProjectDirs[file]
+                const docDir = getDirName(file)
                 return (
                   <div
                     key={file}
-                    className="group flex items-center justify-between rounded px-3 py-2 hover:bg-bg-hover transition-colors cursor-pointer"
+                    className="group flex items-start justify-between rounded px-3 py-2.5 hover:bg-bg-hover transition-colors cursor-pointer"
                     onClick={() => openRecent(file)}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs text-text-primary truncate">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="text-xs text-text-primary font-medium truncate">
                         {getFileName(file)}
                       </div>
-                      <div className="text-xs text-text-muted truncate">{file}</div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-text-muted truncate">
+                        <span className="text-accent-blue shrink-0">&#9679;</span>
+                        <span className="shrink-0">文档</span>
+                        <span className="font-mono truncate">{shortenPath(docDir)}</span>
+                      </div>
                       {boundDir && (
-                        <div className="text-[10px] text-text-muted truncate mt-0.5 flex items-center gap-1">
-                          <span className="text-accent-green">&#9632;</span>
-                          {shortenPath(boundDir)}
+                        <div className="flex items-center gap-1.5 text-[10px] text-text-muted truncate">
+                          <span className="text-accent-green shrink-0">&#9679;</span>
+                          <span className="shrink-0">项目</span>
+                          <span className="font-mono truncate">{shortenPath(boundDir)}</span>
                         </div>
                       )}
                     </div>
@@ -164,7 +194,7 @@ export function WelcomeScreen({ onCreateNew }: WelcomeScreenProps) {
                         e.stopPropagation()
                         removeRecentFile(file)
                       }}
-                      className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-accent-red text-xs ml-2 transition-opacity cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-accent-red text-xs ml-2 mt-0.5 transition-opacity cursor-pointer"
                     >
                       &#10005;
                     </button>

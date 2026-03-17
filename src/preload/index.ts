@@ -118,6 +118,14 @@ const api = {
       return () => ipcRenderer.removeListener('mcp:progress', handler)
     }
   },
+  window: {
+    onBeforeClose: (callback: (isQuitting: boolean) => void) => {
+      const handler = (_event: IpcRendererEvent, isQuitting: boolean) => callback(isQuitting)
+      ipcRenderer.on('window:before-close', handler)
+      return () => { ipcRenderer.removeListener('window:before-close', handler) }
+    },
+    closeReady: (skipConfirm: boolean, saved: boolean) => ipcRenderer.send('window:close-ready', skipConfirm, saved)
+  },
   context: {
     scan: (
       projectDir: string,

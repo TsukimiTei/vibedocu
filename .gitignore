@@ -4,3 +4,4 @@ dist/
 *.dmg
 .DS_Store
 .mcp.json
+.release-env

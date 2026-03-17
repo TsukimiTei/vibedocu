@@ -11,6 +11,7 @@ import { useDocumentStore } from './stores/document-store'
 import { useSettingsStore } from './stores/settings-store'
 import { useFileOps } from './hooks/useFileOps'
 import { useAgent } from './hooks/useAgent'
+import * as fileBridge from './services/file-bridge'
 import type { EditorHandle } from './hooks/useEditor'
 import { findQAInMarkdown, replaceQAAnswer, extractAnswerText, buildQABlock, type UpdateAnswerResult } from './lib/qa-utils'
 
@@ -29,6 +30,23 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+
+  // Auto-save on window close, then signal main process
+  useEffect(() => {
+    return window.api.window.onBeforeClose(async (isAppQuitting) => {
+      let saved = true
+      const { filePath: fp, content: c, isDirty } = useDocumentStore.getState()
+      if (fp && isDirty) {
+        try {
+          await fileBridge.writeFile(fp, c)
+          useDocumentStore.getState().markSaved()
+        } catch {
+          saved = false
+        }
+      }
+      window.api.window.closeReady(isAppQuitting, saved)
+    })
+  }, [])
 
   const handleCreateNew = useCallback(async () => {
     const created = await createNew()
