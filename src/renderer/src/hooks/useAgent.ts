@@ -193,7 +193,7 @@ ${projectContext ? `\n## 项目上下文\n${truncate(projectContext, MAX_PROJECT
         })
         try {
           const maxTurns = hasHistory ? 1 : 3
-        const result = await window.api.mcp.analyze(prompt, filePath, { maxTurns })
+          const result = await window.api.mcp.analyze(prompt, filePath, { maxTurns })
           if (!result.success) {
             setError(result.error || 'Claude Code 分析失败')
           }
@@ -448,7 +448,7 @@ ${projectContext ? `\n## 项目上下文\n${truncate(projectContext, MAX_PROJECT
         return
       }
 
-      setLoading(true, false)
+      setLoading(true)
       try {
         if (useDocumentStore.getState().isDirty) {
           await window.api.file.write(filePath, content)
