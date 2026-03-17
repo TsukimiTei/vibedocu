@@ -42,7 +42,25 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('settings:write', async (_event, data: string) => {
-    writeFileSync(getSettingsPath(), data, 'utf-8')
+    const p = getSettingsPath()
+    // Atomic read-merge-write: prevents multi-window overwrites
+    if (existsSync(p)) {
+      try {
+        const current = JSON.parse(readFileSync(p, 'utf-8'))
+        const incoming = JSON.parse(data)
+        const curState = current.state || {}
+        const newState = incoming.state || {}
+        // Deep merge docProjectDirs so per-doc bindings from other windows survive
+        const mergedDirs = { ...(curState.docProjectDirs || {}), ...(newState.docProjectDirs || {}) }
+        const merged = {
+          ...current,
+          state: { ...curState, ...newState, docProjectDirs: mergedDirs }
+        }
+        writeFileSync(p, JSON.stringify(merged), 'utf-8')
+        return
+      } catch { /* fall through to raw write */ }
+    }
+    writeFileSync(p, data, 'utf-8')
   })
   ipcMain.handle('dialog:openFile', async () => {
     return openFileDialog()

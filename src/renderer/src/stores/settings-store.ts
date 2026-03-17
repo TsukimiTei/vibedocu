@@ -128,6 +128,12 @@ export const useSettingsStore = create<SettingsStore>()(
         styleHistoryDir: state.styleHistoryDir
         // projectDir intentionally excluded — per-window runtime state
       }),
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as object),
+        // projectDir is per-window runtime state — never restore from file
+        projectDir: (current as SettingsStore).projectDir
+      }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) applyTheme(state.theme)
       }
