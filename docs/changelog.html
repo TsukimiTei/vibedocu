@@ -259,8 +259,7 @@
     <span class="logo"><a href="index.html">VibeDocs</a></span>
     <div class="links">
       <a href="index.html#features">Features</a>
-      <a href="index.html#how">How it works</a>
-      <a href="index.html#install">Install</a>
+      <a href="index.html#download">Download</a>
       <a href="changelog.html" class="active">Changelog</a>
       <a href="https://github.com/TsukimiTei/vibedocu">GitHub</a>
     </div>
@@ -279,8 +278,36 @@
 
     <div class="version">
       <div class="version-header">
-        <span class="version-tag">v1.11.0</span>
+        <span class="version-tag">v1.14.0</span>
         <span class="version-badge badge-latest">Latest</span>
+        <span class="version-date">2026-03-17</span>
+      </div>
+      <div class="change-group">
+        <h3 class="added">Added</h3>
+        <ul class="change-list">
+          <li>4 个新淡雅主题 — Sage、Ocean Mist、Dusty Rose、Lavender</li>
+          <li>多窗口项目目录隔离 — 每个窗口独立维护项目目录，互不干扰</li>
+          <li>关闭窗口保护 — 自动保存 + 二次确认弹窗</li>
+          <li>Open/New 两步弹窗 — 选择文件后选择项目目录，流程更清晰</li>
+          <li>Settings 分栏布局 — 左侧 Tab 导航（AI 配置 / 工作空间 / 智能代理 / 外观）</li>
+          <li>Welcome 页面重设计 — 卡片网格 + 工具栏布局</li>
+          <li>MCP 分析提速 9x — 预取所有上下文嵌入 prompt，27 turns → 2-3 turns</li>
+        </ul>
+      </div>
+      <div class="change-group">
+        <h3 class="fixed">Fixed</h3>
+        <ul class="change-list">
+          <li>修复多窗口 projectDir 跨窗口污染（persist merge + 原子 read-merge-write）</li>
+          <li>修复目录选择器每次打开默认目录相同的问题（传入 defaultPath）</li>
+          <li>修复连续分析报 "Analysis already in progress" 的竞态条件</li>
+          <li>修复 Token 显示中间态闪烁 0.0k 的问题</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="version">
+      <div class="version-header">
+        <span class="version-tag">v1.11.0</span>
         <span class="version-date">2026-03</span>
       </div>
       <div class="change-group">
