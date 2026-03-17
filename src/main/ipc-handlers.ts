@@ -294,11 +294,10 @@ export function registerIpcHandlers(): void {
   let isWarming = false
   let warmIdleTimer: ReturnType<typeof setTimeout> | null = null
   const WARM_IDLE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+  const DEFAULT_MAX_TURNS = 3
 
-  const ALLOWED_TOOLS = 'mcp__vibedocs__vibedocs_get_analysis_schema,mcp__vibedocs__vibedocs_open_document,mcp__vibedocs__vibedocs_save_analysis,mcp__vibedocs__vibedocs_scan_project,mcp__vibedocs__vibedocs_read_project_files'
+  const ALLOWED_TOOLS = 'mcp__vibedocs__vibedocs_save_analysis'
 
-  // Track session IDs per document for --resume
-  const docSessions = new Map<string, string>()
 
   function makeCleanEnv(): NodeJS.ProcessEnv {
     const env = { ...process.env }
@@ -344,23 +343,21 @@ export function registerIpcHandlers(): void {
     return found || null
   }
 
-  function buildClaudeArgs(docPath: string): string[] {
+  function buildClaudeArgs(maxTurns?: number): string[] {
     const args = [
       '-p', '--verbose',
       '--output-format', 'stream-json',
       '--allowedTools', ALLOWED_TOOLS
     ]
-    const sessionId = docSessions.get(docPath)
-    if (sessionId) {
-      args.push('--resume', sessionId)
+    if (maxTurns != null) {
+      args.push('--max-turns', String(maxTurns))
     }
     return args
   }
 
-  function spawnForDoc(claudePath: string, docPath: string): ChildProcess {
-    const sessionId = docSessions.get(docPath)
-    console.log('[mcp] spawn: resume=%s session=%s', !!sessionId, sessionId || 'new')
-    return spawn(claudePath, buildClaudeArgs(docPath), {
+  function spawnForDoc(claudePath: string, maxTurns?: number): ChildProcess {
+    console.log('[mcp] spawn: maxTurns=%s', maxTurns || 'unlimited')
+    return spawn(claudePath, buildClaudeArgs(maxTurns), {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: makeCleanEnv()
     })
@@ -375,14 +372,15 @@ export function registerIpcHandlers(): void {
 
       const targetDoc = docPath || null
       if (targetDoc) {
-        console.log('[mcp:warmup] pre-spawning for doc (resume=%s)', docSessions.has(targetDoc))
-        warmProcess = spawnForDoc(claudePath, targetDoc)
+        console.log('[mcp:warmup] pre-spawning warm process')
+        warmProcess = spawnForDoc(claudePath, DEFAULT_MAX_TURNS)
       } else {
         // Generic warm — no session
         console.log('[mcp:warmup] pre-spawning generic process')
         warmProcess = spawn(claudePath, [
           '-p', '--verbose', '--output-format', 'stream-json',
-          '--allowedTools', ALLOWED_TOOLS
+          '--allowedTools', ALLOWED_TOOLS,
+          '--max-turns', String(DEFAULT_MAX_TURNS)
         ], { stdio: ['pipe', 'pipe', 'pipe'], env: makeCleanEnv() })
       }
       warmDocPath = targetDoc
@@ -409,7 +407,7 @@ export function registerIpcHandlers(): void {
     await warmUp(docPath)
   })
 
-  ipcMain.handle('mcp:analyze', async (_event, prompt: string, docPath: string) => {
+  ipcMain.handle('mcp:analyze', async (_event, prompt: string, docPath: string, options?: { maxTurns?: number }) => {
     if (claudeProcess) {
       return { success: false, error: 'Analysis already in progress' }
     }
@@ -423,23 +421,21 @@ export function registerIpcHandlers(): void {
     try {
       let proc: ChildProcess
 
-      if (warmProcess && warmDocPath === docPath) {
-        // Pre-warmed for this exact doc — reuse
-        console.log('[mcp:analyze] using pre-warmed process (resume=%s)', docSessions.has(docPath))
+      const effectiveMaxTurns = options?.maxTurns ?? DEFAULT_MAX_TURNS
+      if (warmProcess && effectiveMaxTurns <= DEFAULT_MAX_TURNS) {
+        console.log('[mcp:analyze] using pre-warmed process (maxTurns=%d)', DEFAULT_MAX_TURNS)
         proc = warmProcess
         warmProcess = null
         warmDocPath = null
       } else {
-        // Kill stale warm process if for a different doc
         if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null; warmDocPath = null }
-
         const claudePath = await findClaudeBinary()
         if (!claudePath) {
           claudeProcess = null
           return { success: false, error: '找不到 claude 命令，请确认已安装 Claude Code CLI' }
         }
-        console.log('[mcp:analyze] cold start (resume=%s)', docSessions.has(docPath))
-        proc = spawnForDoc(claudePath, docPath)
+        console.log('[mcp:analyze] cold start (maxTurns=%d)', effectiveMaxTurns)
+        proc = spawnForDoc(claudePath, effectiveMaxTurns)
       }
 
       claudeProcess = proc
@@ -452,14 +448,7 @@ export function registerIpcHandlers(): void {
         let lineBuf = ''
         let resolved = false
         const toolIdMap: Record<string, string> = {}
-        const seenMsgIds = new Set<string>()
-        let totalInputTokens = 0
-        let totalOutputTokens = 0
         const toolLabels: Record<string, string> = {
-          vibedocs_get_analysis_schema: '加载分析框架',
-          vibedocs_open_document: '读取文档',
-          vibedocs_scan_project: '扫描项目文件',
-          vibedocs_read_project_files: '读取项目文件',
           vibedocs_save_analysis: '保存分析结果'
         }
 
@@ -477,19 +466,13 @@ export function registerIpcHandlers(): void {
             let evt: any = null
             try { evt = JSON.parse(line) } catch { continue }
 
-            console.log('[mcp:evt]', evt.type, evt.subtype || '', JSON.stringify(evt).slice(0, 200))
+            if (evt.type === 'result') {
+              console.log('[mcp:result-full]', JSON.stringify({ usage: evt.usage, num_turns: evt.num_turns, duration_ms: evt.duration_ms }))
+            }
 
             if (evt.type === 'system' || evt.type === 'rate_limit_event') continue
 
             if (evt.type === 'assistant') {
-              // Accumulate tokens — deduplicate by message id
-              const msgId = evt.message?.id
-              if (msgId && !seenMsgIds.has(msgId) && evt.message?.usage) {
-                seenMsgIds.add(msgId)
-                totalInputTokens += evt.message.usage.input_tokens || 0
-                totalOutputTokens += evt.message.usage.output_tokens || 0
-                send({ step: 'tokens', inputTokens: totalInputTokens, outputTokens: totalOutputTokens })
-              }
               for (const block of (evt.message?.content || [])) {
                 if (block.type === 'tool_use') {
                   const raw = (block.name || '').replace('mcp__vibedocs__', '')
@@ -510,20 +493,17 @@ export function registerIpcHandlers(): void {
                 }
               }
             } else if (evt.type === 'result') {
-              // Capture session ID for future --resume
-              if (evt.session_id) {
-                docSessions.set(docPath, evt.session_id)
-                console.log('[mcp] captured session:', evt.session_id)
-              }
+              const usage = evt.usage || {}
               send({
                 step: 'result',
                 text: typeof evt.result === 'string' ? evt.result : '',
                 durationMs: evt.duration_ms,
                 turns: evt.num_turns,
-                inputTokens: evt.usage?.input_tokens || totalInputTokens,
-                outputTokens: evt.usage?.output_tokens || totalOutputTokens
+                inputTokens: usage.input_tokens || 0,
+                outputTokens: usage.output_tokens || 0
               })
-              // Push agent data to renderer before resolving so UI updates with results
+              // Clear process reference on result (before close event fires)
+              claudeProcess = null
               if (!resolved) {
                 resolved = true
                 readAgentData(docPath).then((agentData) => {
@@ -531,7 +511,7 @@ export function registerIpcHandlers(): void {
                     win.webContents.send('agent:changed', agentData)
                   }
                 }).catch(() => {}).finally(() => {
-                  setTimeout(() => resolve({ success: true }), 100)
+                  resolve({ success: true })
                 })
               }
             }
@@ -550,16 +530,14 @@ export function registerIpcHandlers(): void {
             try {
               const evt = JSON.parse(lineBuf)
               if (evt.type === 'result') {
-                if (evt.session_id) {
-                  docSessions.set(docPath, evt.session_id)
-                }
+                const fUsage = evt.usage || {}
                 send({
                   step: 'result',
                   text: typeof evt.result === 'string' ? evt.result : '',
                   durationMs: evt.duration_ms,
                   turns: evt.num_turns,
-                  inputTokens: evt.usage?.input_tokens || totalInputTokens,
-                  outputTokens: evt.usage?.output_tokens || totalOutputTokens
+                  inputTokens: fUsage.input_tokens || 0,
+                  outputTokens: fUsage.output_tokens || 0
                 })
               }
             } catch { /* not valid JSON, ignore */ }
