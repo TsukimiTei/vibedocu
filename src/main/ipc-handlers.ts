@@ -66,8 +66,8 @@ export function registerIpcHandlers(): void {
     return openFileDialog()
   })
 
-  ipcMain.handle('dialog:chooseDirectory', async () => {
-    return chooseDirectoryDialog()
+  ipcMain.handle('dialog:chooseDirectory', async (_event, defaultPath?: string) => {
+    return chooseDirectoryDialog(defaultPath)
   })
 
   ipcMain.handle('file:read', async (_event, filePath: string) => {

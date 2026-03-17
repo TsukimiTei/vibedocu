@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 const api = {
   dialog: {
     openFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFile'),
-    chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:chooseDirectory')
+    chooseDirectory: (defaultPath?: string): Promise<string | null> => ipcRenderer.invoke('dialog:chooseDirectory', defaultPath)
   },
   file: {
     read: (filePath: string): Promise<string> => ipcRenderer.invoke('file:read', filePath),

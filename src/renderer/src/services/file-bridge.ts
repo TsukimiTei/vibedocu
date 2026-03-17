@@ -4,8 +4,8 @@ export async function openFile(): Promise<string | null> {
   return api.dialog.openFile()
 }
 
-export async function chooseDirectory(): Promise<string | null> {
-  return api.dialog.chooseDirectory()
+export async function chooseDirectory(defaultPath?: string): Promise<string | null> {
+  return api.dialog.chooseDirectory(defaultPath)
 }
 
 export async function readFile(filePath: string): Promise<string> {

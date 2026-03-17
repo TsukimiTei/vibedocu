@@ -119,7 +119,7 @@ export default function App() {
         <div className="h-full flex flex-col">
           <div className="h-[38px] shrink-0 app-drag-region bg-bg-secondary border-b border-border" />
           <div className="flex-1">
-            <WelcomeScreen onCreateNew={handleCreateNew} />
+            <WelcomeScreen onOpenSettings={() => setSettingsOpen(true)} />
           </div>
         </div>
         <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />

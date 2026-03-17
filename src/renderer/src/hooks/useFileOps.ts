@@ -110,6 +110,52 @@ export function useFileOps() {
     return { oldFileName }
   }, [filePath, setFilePath, setContent, markSaved])
 
+  /** Open a file at a known path, optionally binding a project dir. */
+  const openAtPath = useCallback(
+    async (path: string, projectDir?: string) => {
+      const fileContent = await fileBridge.readFile(path)
+      setFilePath(path)
+      setContent(fileContent)
+      markSaved()
+      addRecentFile(path)
+      ;(window as any).__vibedocu_docPath = path
+      useTerminalStore.getState().reset()
+      useAgentStore.getState().loadFromFile(path)
+      useContextStore.getState().loadFromFile(path)
+      usePageStatusStore.getState().loadFromFile(path)
+      if (projectDir) {
+        useSettingsStore.getState().setProjectDir(projectDir)
+        useSettingsStore.getState().bindProjectDir(path, projectDir)
+      } else {
+        syncProjectDirBinding(path)
+      }
+    },
+    [setFilePath, setContent, markSaved, addRecentFile]
+  )
+
+  /** Create a new file in a directory, optionally binding a project dir. */
+  const createAtDir = useCallback(
+    async (dir: string, fileName?: string, projectDir?: string) => {
+      const name = fileName || 'requirements'
+      const path = `${dir}/${name}.md`
+      await fileBridge.writeFile(path, NEW_DOC_TEMPLATE)
+      setFilePath(path)
+      setContent(NEW_DOC_TEMPLATE)
+      markSaved()
+      addRecentFile(path)
+      ;(window as any).__vibedocu_docPath = path
+      useTerminalStore.getState().reset()
+      useAgentStore.getState().reset()
+      useContextStore.getState().reset()
+      usePageStatusStore.getState().reset()
+      if (projectDir) {
+        useSettingsStore.getState().setProjectDir(projectDir)
+        useSettingsStore.getState().bindProjectDir(path, projectDir)
+      }
+    },
+    [setFilePath, setContent, markSaved, addRecentFile]
+  )
+
   const closeDocument = useCallback(() => {
     reset()
     useTerminalStore.getState().reset()
@@ -118,5 +164,5 @@ export function useFileOps() {
     usePageStatusStore.getState().reset()
   }, [reset])
 
-  return { openExisting, openRecent, createNew, save, rename, closeDocument }
+  return { openExisting, openRecent, createNew, openAtPath, createAtDir, save, rename, closeDocument }
 }

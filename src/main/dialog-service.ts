@@ -12,8 +12,9 @@ export async function openFileDialog(): Promise<string | null> {
   return result.filePaths[0]
 }
 
-export async function chooseDirectoryDialog(): Promise<string | null> {
+export async function chooseDirectoryDialog(defaultPath?: string): Promise<string | null> {
   const result = await dialog.showOpenDialog({
+    defaultPath: defaultPath || undefined,
     properties: ['openDirectory', 'createDirectory']
   })
 
