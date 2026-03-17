@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useContextStore } from '@/stores/context-store'
 import { useSmartAgentStore } from '@/stores/smart-agent-store'
 import { analyzeDocument, analyzeSelectedText, selectRelevantFiles } from '@/services/openrouter-service'
+import { SYSTEM_PROMPT } from '@/lib/constants'
 import {
   scanProjectFiles,
   readContextFiles,
@@ -26,6 +27,15 @@ function getProjectDir(filePath: string): string {
   const i = filePath.lastIndexOf('/')
   return i > 0 ? filePath.substring(0, i) : filePath
 }
+
+/** Truncate content to a maximum character count, appending a notice if truncated. */
+function truncate(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  return text.slice(0, maxChars) + `\n\n[...内容已截断，共 ${text.length} 字符，显示前 ${maxChars} 字符]`
+}
+
+const MAX_PAGE_CHARS = 15_000
+const MAX_PROJECT_CONTEXT_CHARS = 30_000
 
 /**
  * Resolve a relative image src to an absolute path based on the document's directory.
@@ -115,47 +125,86 @@ export function useAgent() {
           useDocumentStore.getState().markSaved()
         }
 
-        const projectDir = getProjectDir(filePath)
+        // Pre-fetch all context to include directly in the prompt
+        // This avoids multiple tool call round-trips (6+ turns → 2-3 turns)
+        const basePrdContext = activePageIndex > 0 ? getPageContent(content, 0) : null
+        let projectContext: string | null = null
+        if (filePath) {
+          const savedData = await readContextData(filePath)
+          if (savedData) {
+            try {
+              const parsed = JSON.parse(savedData)
+              projectContext = parsed.contextString || null
+            } catch { /* ignore */ }
+          }
+          // No cached context → quick scan + read relevant files
+          if (!projectContext) {
+            try {
+              const projectDir = getProjectDir(filePath)
+              const manifest = await scanProjectFiles(projectDir, filePath)
+              if (manifest.length > 0) {
+                const manifestPaths = manifest.map((f) => f.relativePath)
+                const selectedPaths = apiKey
+                  ? await selectRelevantFiles(pageContent, manifestPaths, model, apiKey)
+                  : manifestPaths.slice(0, 10)
+                const pathMap = new Map(manifest.map((f) => [f.relativePath, f.absolutePath]))
+                const absolutePaths = selectedPaths.map((rel) => pathMap.get(rel)).filter((p): p is string => !!p)
+                if (absolutePaths.length > 0) {
+                  const fileContents = await readContextFiles(absolutePaths)
+                  if (fileContents.length > 0) {
+                    projectContext = `# Project Context\n\n${fileContents.length} relevant files from ${manifest.length} total.\n\n`
+                    for (const file of fileContents) {
+                      const rel = manifest.find((m) => m.absolutePath === file.path)?.relativePath || file.path
+                      projectContext += `## ${rel}\n\`\`\`\n${file.content}\n\`\`\`\n\n`
+                    }
+                  }
+                }
+                // Cache for next time
+                if (projectContext) {
+                  const dataToSave = JSON.stringify({
+                    files: manifest.map((f) => ({ relativePath: f.relativePath, size: f.size })),
+                    contextString: projectContext,
+                    lastScanned: Date.now()
+                  })
+                  await writeContextData(filePath, dataToSave)
+                }
+              }
+            } catch (err) {
+              console.error('[mcp] project scan failed:', err)
+            }
+          }
+        }
 
-        const prompt = hasHistory
-          ? `用户更新了文档，请重新分析 ${filePath} 的第 ${activePageIndex} 页。
+        const prompt = `你是 PRD 文档分析师。请分析以下文档并调用 vibedocs_save_analysis 保存结果。
 
-步骤：
-1. 调用 vibedocs_open_document 读取最新文档内容（你已有分析框架和项目上下文，无需重新获取）
-2. 对比之前的分析，关注文档的变化和改进
-3. 根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个新问题和更新的完成度评分
-4. 调用 vibedocs_save_analysis 保存分析结果
+## 分析框架
+${SYSTEM_PROMPT}
 
-直接执行，不要解释。`
-          : `使用 vibedocs MCP 工具分析文档 ${filePath} 的第 ${activePageIndex} 页。
-
-步骤：
-1. 调用 vibedocs_get_analysis_schema 获取分析框架
-2. 调用 vibedocs_open_document 读取文档内容
-3. 调用 vibedocs_scan_project 扫描项目目录 ${projectDir}，了解项目结构
-4. 如果有相关代码文件，调用 vibedocs_read_project_files 读取关键文件
-5. 结合文档内容和项目上下文，根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个问题和完成度评分
-6. 调用 vibedocs_save_analysis 保存分析结果
-
-直接执行，不要解释。`
+## 当前页面内容（第 ${activePageIndex} 页）
+${truncate(pageContent, MAX_PAGE_CHARS)}
+${basePrdContext ? `\n## 基础 PRD 信息（第 0 页）\n${truncate(basePrdContext, MAX_PAGE_CHARS)}` : ''}
+${projectContext ? `\n## 项目上下文\n${truncate(projectContext, MAX_PROJECT_CONTEXT_CHARS)}` : ''}
+请根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个问题和完成度评分。
+直接调用 vibedocs_save_analysis(file_path="${filePath}", page_index=${activePageIndex}, analysis={...}) 保存结果。
+不要调用其他工具，不要输出额外文字。`
 
         const unsubProgress = window.api.mcp.onProgress((chunk: string) => {
           pushMcpEvent(chunk)
         })
         try {
-          const result = await window.api.mcp.analyze(prompt, filePath)
+          const maxTurns = hasHistory ? 1 : 3
+          const result = await window.api.mcp.analyze(prompt, filePath, { maxTurns })
           if (!result.success) {
             setError(result.error || 'Claude Code 分析失败')
           }
         } finally {
-          unsubProgress()
+          // Delay unsubscribe so queued mcp:progress events (especially 'result') get processed
+          setTimeout(() => unsubProgress(), 500)
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'MCP 分析失败'
         setError(message)
       } finally {
-        // _loadRaw handles isLoading via agent:changed event.
-        // Fallback: if still loading after 30s (e.g. save_analysis failed), force stop.
         setTimeout(() => {
           if (useAgentStore.getState().isLoading) setLoading(false)
         }, 30_000)
@@ -406,32 +455,45 @@ export function useAgent() {
           useDocumentStore.getState().markSaved()
         }
 
-        const partialProjectDir = getProjectDir(filePath)
-        const prompt = `使用 vibedocs MCP 工具分析文档 ${filePath} 第 ${activePageIndex} 页中的选中文字。
+        const pageContent = getPageContent(content, activePageIndex)
+        const basePrdContext = activePageIndex > 0 ? getPageContent(content, 0) : null
+        let projectContext: string | null = null
+        const savedData = await readContextData(filePath)
+        if (savedData) {
+          try {
+            const parsed = JSON.parse(savedData)
+            projectContext = parsed.contextString || null
+          } catch { /* ignore */ }
+        }
 
-选中内容："${selectedText}"
-${customQuestion ? `用户问题：${customQuestion}` : ''}
+        const prompt = `你是 PRD 文档分析师。请分析以下选中文字并调用 vibedocs_save_analysis 保存结果。
 
-步骤：
-1. 调用 vibedocs_get_analysis_schema 获取分析框架
-2. 调用 vibedocs_open_document 读取完整文档上下文
-3. 调用 vibedocs_scan_project 扫描项目目录 ${partialProjectDir}，了解项目结构
-4. 如果有相关代码文件，调用 vibedocs_read_project_files 读取关键文件
-5. 以选中文字为焦点，结合项目上下文进行分析
-6. 调用 vibedocs_save_analysis 保存分析结果
+## 分析框架
+${SYSTEM_PROMPT}
 
-直接执行，不要解释。`
+## 选中内容
+<user_selection>${selectedText}</user_selection>
+${customQuestion ? `\n## 用户问题\n<user_question>${customQuestion}</user_question>` : ''}
+
+## 所在页面上下文（第 ${activePageIndex} 页）
+${truncate(pageContent, MAX_PAGE_CHARS)}
+${basePrdContext ? `\n## 基础 PRD 信息（第 0 页）\n${truncate(basePrdContext, MAX_PAGE_CHARS)}` : ''}
+${projectContext ? `\n## 项目上下文\n${truncate(projectContext, MAX_PROJECT_CONTEXT_CHARS)}` : ''}
+
+以选中文字为焦点，根据分析框架进行分析，生成最多 5 个问题和完成度评分。
+直接调用 vibedocs_save_analysis(file_path="${filePath}", page_index=${activePageIndex}, analysis={...}) 保存结果。
+不要调用其他工具，不要输出额外文字。`
 
         const unsubPartialProgress = window.api.mcp.onProgress((chunk: string) => {
           pushMcpEvent(chunk)
         })
         try {
-          const result = await window.api.mcp.analyze(prompt, filePath)
+          const result = await window.api.mcp.analyze(prompt, filePath, { maxTurns: 1 })
           if (!result.success) {
             setError(result.error || 'Claude Code 分析失败')
           }
         } finally {
-          unsubPartialProgress()
+          setTimeout(() => unsubPartialProgress(), 500)
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'MCP 分析失败'
@@ -439,7 +501,7 @@ ${customQuestion ? `用户问题：${customQuestion}` : ''}
       } finally {
         setTimeout(() => {
           if (useAgentStore.getState().isLoading) setLoading(false)
-        }, 3000)
+        }, 30_000)
       }
       return
     }

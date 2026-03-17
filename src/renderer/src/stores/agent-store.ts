@@ -16,26 +16,17 @@ export interface McpStats {
 }
 
 const MCP_PIPELINE_FULL: { id: string; label: string }[] = [
-  { id: 'schema', label: '加载分析框架' },
-  { id: 'read', label: '读取文档' },
-  { id: 'scan', label: '扫描项目文件' },
-  { id: 'readfiles', label: '读取项目文件' },
   { id: 'analyze', label: 'AI 分析中' },
   { id: 'save', label: '保存分析结果' }
 ]
 
 const MCP_PIPELINE_RESUME: { id: string; label: string }[] = [
-  { id: 'read', label: '读取最新文档' },
-  { id: 'analyze', label: 'AI 分析中' },
+  { id: 'analyze', label: 'AI 重新分析中' },
   { id: 'save', label: '保存分析结果' }
 ]
 
 // Map tool names to pipeline step ids
 const TOOL_TO_STEP: Record<string, string> = {
-  '加载分析框架': 'schema',
-  '读取文档': 'read',
-  '扫描项目文件': 'scan',
-  '读取项目文件': 'readfiles',
   '保存分析结果': 'save'
 }
 
@@ -149,30 +140,6 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
         let activity = s.mcpActivity
 
-        const DATA_STEP_IDS = ['schema', 'read', 'scan', 'readfiles']
-
-        // Check if all data-gathering tools are done
-        // Steps not in the current pipeline are treated as done (e.g. resume mode skips schema/scan)
-        const stepDone = (id: string) => {
-          const st = steps.find((s) => s.id === id)
-          return !st || st.status === 'done'
-        }
-        const stepNotRunning = (id: string) => {
-          const st = steps.find((s) => s.id === id)
-          return !st || st.status !== 'running'
-        }
-        const dataGatheringDone = () =>
-          stepDone('schema') && stepDone('read') && stepNotRunning('scan') && stepNotRunning('readfiles')
-
-        // When analyze starts, mark skipped data steps as done so no pending dots above running
-        const startAnalyze = () => {
-          for (const id of DATA_STEP_IDS) {
-            const st = steps.find((s) => s.id === id)
-            if (st && st.status === 'pending') st.status = 'done'
-          }
-          mark('analyze', 'running')
-        }
-
         if (evt.step === 'tool') {
           const stepId = TOOL_TO_STEP[evt.name]
           if (!stepId) return s
@@ -182,23 +149,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             activity = evt.name
           } else if (evt.status === 'done') {
             mark(stepId, 'done')
-            if (dataGatheringDone()) {
-              startAnalyze()
-            }
             activity = ''
             if (stepId === 'save') {
               mark('analyze', 'done')
             }
           }
-        } else if (evt.step === 'tokens') {
-          stats = {
-            ...(stats || { durationMs: 0, turns: 0 }),
-            inputTokens: evt.inputTokens || 0,
-            outputTokens: evt.outputTokens || 0
-          }
         } else if (evt.step === 'thinking') {
           activity = '思考中...'
-          if (dataGatheringDone()) startAnalyze()
         } else if (evt.step === 'text') {
           // Show brief snippet of AI output
           const text = (evt.text || '').replace(/\n/g, ' ').trim()
@@ -326,12 +283,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         completeness: latest.completeness,
         error: null
       }
-      // Only clear isLoading if we're in MCP mode (watcher-driven).
-      // Don't clobber OpenRouter's loading state.
-      const current = get()
-      if (current.isLoading && current.mcpSteps.length > 0) {
-        update.isLoading = false
-      }
+      // Don't clear isLoading here — let pushMcpEvent's result event be the
+      // single source of truth for completion (it also sets final mcpStats).
       set(update)
     } catch {
       // Corrupted data — ignore

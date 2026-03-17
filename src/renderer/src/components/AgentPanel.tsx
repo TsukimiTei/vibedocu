@@ -180,9 +180,6 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-text-muted uppercase tracking-wider">Claude Code</span>
                   <div className="flex gap-2 text-[11px] text-text-muted font-mono tabular-nums">
-                    {mcpStats && (mcpStats.inputTokens + mcpStats.outputTokens) > 0 && (
-                      <span>{((mcpStats.inputTokens + mcpStats.outputTokens) / 1000).toFixed(1)}k tokens</span>
-                    )}
                     <span>{elapsed}s</span>
                   </div>
                 </div>
@@ -223,7 +220,7 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
           </div>
         )}
 
-        {!isLoading && mcpStats && (
+        {!isLoading && !error && mcpStats && mcpStats.durationMs > 0 && (
           <div className="flex gap-3 px-1 py-2 text-[10px] text-text-muted font-mono">
             <span>{(mcpStats.durationMs / 1000).toFixed(1)}s</span>
             <span>{mcpStats.turns} turns</span>
