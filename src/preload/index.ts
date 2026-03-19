@@ -106,7 +106,7 @@ const api = {
       ipcRenderer.invoke('mcp:status'),
     warmup: (docPath?: string): Promise<void> =>
       ipcRenderer.invoke('mcp:warmup', docPath),
-    analyze: (prompt: string, docPath: string, options?: { maxTurns?: number }): Promise<{ success: boolean; error?: string }> =>
+    analyze: (prompt: string, docPath: string, options?: { maxTurns?: number; pageIndex?: number; resume?: boolean; contextHash?: string }): Promise<{ success: boolean; error?: string; rawText?: string; sessionId?: string; stats?: { durationMs: number; turns: number; inputTokens: number; outputTokens: number } }> =>
       ipcRenderer.invoke('mcp:analyze', prompt, docPath, options),
     abort: (): void =>
       ipcRenderer.send('mcp:abort'),

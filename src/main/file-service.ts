@@ -145,6 +145,32 @@ export async function writeContextData(docPath: string, data: string): Promise<v
   await fsWriteFile(dataPath, data, 'utf-8')
 }
 
+/** Claude CLI session persistence — stored alongside document data */
+function getClaudeSessionsPath(docPath: string): string {
+  const docName = parse(docPath).name
+  const docDir = dirname(docPath)
+  return join(docDir, docName, 'claude-sessions.json')
+}
+
+export async function readClaudeSessions(docPath: string): Promise<string | null> {
+  const dataPath = getClaudeSessionsPath(docPath)
+  if (!existsSync(dataPath)) return null
+  try {
+    return await fsReadFile(dataPath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+export async function writeClaudeSessions(docPath: string, data: string): Promise<void> {
+  const dataPath = getClaudeSessionsPath(docPath)
+  const dir = dirname(dataPath)
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true })
+  }
+  await fsWriteFile(dataPath, data, 'utf-8')
+}
+
 /** Style profile persistence — stored in user-chosen directory */
 export async function readStyleProfile(dirPath: string): Promise<string | null> {
   const dataPath = join(dirPath, 'style-profile.json')
