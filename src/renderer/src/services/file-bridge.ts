@@ -100,6 +100,42 @@ export async function writeContextData(docPath: string, data: string): Promise<v
   return api.context.writeData(docPath, data)
 }
 
+// Screenshot operations
+export async function readScreenshotManifest(docPath: string): Promise<string | null> {
+  return window.api.screenshot.readManifest(docPath)
+}
+
+export async function writeScreenshotManifest(docPath: string, data: string): Promise<void> {
+  return window.api.screenshot.writeManifest(docPath, data)
+}
+
+export async function saveScreenshot(
+  docPath: string,
+  imageBuffer: ArrayBuffer,
+  filename: string
+): Promise<{ savedPath: string; relativePath: string }> {
+  return window.api.screenshot.save(docPath, imageBuffer, filename)
+}
+
+export async function deleteScreenshotFile(docPath: string, filename: string): Promise<void> {
+  return window.api.screenshot.delete(docPath, filename)
+}
+
+export async function listScreenshotFiles(docPath: string): Promise<string[]> {
+  return window.api.screenshot.list(docPath)
+}
+
+export async function readScreenshotBase64(
+  docPath: string,
+  filename: string
+): Promise<{ base64: string; mimeType: string } | null> {
+  return window.api.screenshot.readBase64(docPath, filename)
+}
+
+export async function getScreenshotsDir(docPath: string): Promise<string> {
+  return window.api.screenshot.getDir(docPath)
+}
+
 export async function registerMcpServer(): Promise<{ success: boolean; error?: string }> {
   return api.mcp.register()
 }

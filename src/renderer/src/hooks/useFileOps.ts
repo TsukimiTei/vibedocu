@@ -5,6 +5,7 @@ import { useAgentStore } from '@/stores/agent-store'
 import { useContextStore } from '@/stores/context-store'
 import { usePageStatusStore } from '@/stores/page-status-store'
 import { useTerminalStore } from '@/stores/terminal-store'
+import { useScreenshotStore } from '@/stores/screenshot-store'
 import * as fileBridge from '@/services/file-bridge'
 import { NEW_DOC_TEMPLATE } from '@/lib/constants'
 
@@ -36,6 +37,9 @@ export function useFileOps() {
     useAgentStore.getState().loadFromFile(path)
     useContextStore.getState().loadFromFile(path)
     usePageStatusStore.getState().loadFromFile(path)
+    useScreenshotStore.getState().loadManifest(path).then(() => {
+      useScreenshotStore.getState().loadAllThumbnails(path)
+    })
     syncProjectDirBinding(path)
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
@@ -53,6 +57,9 @@ export function useFileOps() {
         useAgentStore.getState().loadFromFile(path)
         useContextStore.getState().loadFromFile(path)
         usePageStatusStore.getState().loadFromFile(path)
+        useScreenshotStore.getState().loadManifest(path).then(() => {
+          useScreenshotStore.getState().loadAllThumbnails(path)
+        })
         syncProjectDirBinding(path)
       } catch {
         // File no longer exists, remove from recent list
@@ -76,6 +83,7 @@ export function useFileOps() {
     useAgentStore.getState().reset()
     useContextStore.getState().reset()
     usePageStatusStore.getState().reset()
+    useScreenshotStore.getState().reset()
     syncProjectDirBinding(path)
     return true
   }, [setFilePath, setContent, markSaved, addRecentFile])
@@ -123,6 +131,9 @@ export function useFileOps() {
       useAgentStore.getState().loadFromFile(path)
       useContextStore.getState().loadFromFile(path)
       usePageStatusStore.getState().loadFromFile(path)
+      useScreenshotStore.getState().loadManifest(path).then(() => {
+        useScreenshotStore.getState().loadAllThumbnails(path)
+      })
       if (projectDir) {
         useSettingsStore.getState().setProjectDir(projectDir)
         useSettingsStore.getState().bindProjectDir(path, projectDir)
@@ -148,6 +159,7 @@ export function useFileOps() {
       useAgentStore.getState().reset()
       useContextStore.getState().reset()
       usePageStatusStore.getState().reset()
+      useScreenshotStore.getState().reset()
       if (projectDir) {
         useSettingsStore.getState().setProjectDir(projectDir)
         useSettingsStore.getState().bindProjectDir(path, projectDir)
@@ -162,6 +174,7 @@ export function useFileOps() {
     useAgentStore.getState().reset()
     useContextStore.getState().reset()
     usePageStatusStore.getState().reset()
+    useScreenshotStore.getState().reset()
   }, [reset])
 
   return { openExisting, openRecent, createNew, openAtPath, createAtDir, save, rename, closeDocument }

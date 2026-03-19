@@ -15,6 +15,8 @@ import {
 } from '@/services/file-bridge'
 import { loadStyleProfile, isStyleReady, predictAnswers } from '@/services/style-service'
 import { getPageContent, extractImages } from '@/lib/page-utils'
+import { useScreenshotStore } from '@/stores/screenshot-store'
+import { parseImageRefs } from '@/services/screenshot-service'
 import { toast } from '@/components/ui/Toast'
 import { buildQABlock } from '@/lib/qa-utils'
 import type { ImageData } from '@/services/prompt-builder'
@@ -36,6 +38,50 @@ function truncate(text: string, maxChars: number): string {
 
 const MAX_PAGE_CHARS = 15_000
 const MAX_PROJECT_CONTEXT_CHARS = 30_000
+const MAX_SCREENSHOT_CONTEXT_CHARS = 8_000
+
+/**
+ * Build screenshot context for analysis.
+ * Returns global index + detailed analysis for referenced images.
+ */
+function buildScreenshotContext(pageContent: string): string | null {
+  const store = useScreenshotStore.getState()
+  const { manifest } = store
+  if (manifest.screenshots.length === 0) return null
+
+  const analyzingCount = manifest.screenshots.filter((s) => s.status === 'analyzing').length
+
+  // Global index (compact, ~2K tokens for 50 images)
+  let context = store.buildGlobalIndex()
+
+  // Find #references in page content to include detailed analysis
+  const refs = parseImageRefs(pageContent)
+  const referencedIds = new Set<number>()
+  for (const ref of refs) {
+    if (ref.id != null) {
+      referencedIds.add(ref.id)
+    } else if (ref.name) {
+      const match = store.getScreenshotByRef(`#${ref.name}`)
+      if (match) referencedIds.add(match.id)
+    }
+  }
+
+  if (referencedIds.size > 0) {
+    context += '\n# Referenced Screenshot Details\n'
+    context += store.buildDetailedContext(Array.from(referencedIds))
+  }
+
+  if (analyzingCount > 0) {
+    context += `\n\n注意：有 ${analyzingCount} 张截图尚在分析中，建议分析完成后再次 Update 以获取完整上下文。`
+  }
+
+  // Truncate if too long
+  if (context.length > MAX_SCREENSHOT_CONTEXT_CHARS) {
+    context = context.slice(0, MAX_SCREENSHOT_CONTEXT_CHARS) + '\n[...截图上下文已截断]'
+  }
+
+  return context
+}
 
 /**
  * Resolve a relative image src to an absolute path based on the document's directory.
@@ -175,6 +221,8 @@ export function useAgent() {
           }
         }
 
+        const screenshotContext = buildScreenshotContext(pageContent)
+
         const prompt = `你是 PRD 文档分析师。请分析以下文档并调用 vibedocs_save_analysis 保存结果。
 
 ## 分析框架
@@ -184,6 +232,7 @@ ${SYSTEM_PROMPT}
 ${truncate(pageContent, MAX_PAGE_CHARS)}
 ${basePrdContext ? `\n## 基础 PRD 信息（第 0 页）\n${truncate(basePrdContext, MAX_PAGE_CHARS)}` : ''}
 ${projectContext ? `\n## 项目上下文\n${truncate(projectContext, MAX_PROJECT_CONTEXT_CHARS)}` : ''}
+${screenshotContext ? `\n## 截图上下文\n用户上传了产品截图，以下是截图的结构化分析摘要。当文档中出现 #编号 引用时，它指代对应的截图。请结合截图信息进行更精准的分析和提问。你也可以在问题和选项中使用 #编号 来引用截图。\n${screenshotContext}` : ''}
 请根据分析框架对第 ${activePageIndex} 页进行 8 维度分析，生成最多 5 个问题和完成度评分。
 直接调用 vibedocs_save_analysis(file_path="${filePath}", page_index=${activePageIndex}, analysis={...}) 保存结果。
 不要调用其他工具，不要输出额外文字。`
@@ -327,13 +376,17 @@ ${projectContext ? `\n## 项目上下文\n${truncate(projectContext, MAX_PROJECT
         console.log(`[agent] Loaded ${images.length} image(s) from page`)
       }
 
+      // Build screenshot context from manifest
+      const screenshotContext = buildScreenshotContext(pageContent)
+      const fullProjectContext = [projectContext, screenshotContext].filter(Boolean).join('\n\n')
+
       // Step 4: Full analysis with context and images
       const response = await analyzeDocument(
         pageContent,
         model,
         apiKey,
         basePrdContext,
-        projectContext,
+        fullProjectContext || null,
         images.length > 0 ? images : undefined
       )
       addSession(response.questions, response.completeness, activePageIndex)

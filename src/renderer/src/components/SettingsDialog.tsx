@@ -9,6 +9,7 @@ import { chooseDirectory, registerMcpServer, getMcpStatus } from '@/services/fil
 import { relearnStyle } from '@/services/style-service'
 import { cn } from '@/lib/utils'
 import { toast } from './ui/Toast'
+import { AVAILABLE_MODELS } from '@/lib/constants'
 import type { ThemeId } from '@/types/settings'
 import type { SmartAgentMode } from '@/types/smart-agent'
 
@@ -48,6 +49,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     projectDir, setProjectDir,
     smartAgentMode, setSmartAgentMode,
     styleHistoryDir, setStyleHistoryDir,
+    screenshotModel, setScreenshotModel,
     model
   } = useSettingsStore()
   const isLearning = useSmartAgentStore((s) => s.isLearning)
@@ -205,6 +207,24 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                       </p>
                     </div>
                     <ModelSelector />
+                    <div>
+                      <label className="block text-sm text-text-muted mb-2">
+                        截图分析模型 <span className="text-text-muted/50">(可选)</span>
+                      </label>
+                      <select
+                        value={screenshotModel}
+                        onChange={(e) => setScreenshotModel(e.target.value)}
+                        className="w-full bg-bg-tertiary border border-border rounded px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-blue/50 font-mono"
+                      >
+                        <option value="">与主模型相同</option>
+                        {AVAILABLE_MODELS.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-text-muted mt-1.5">
+                        用于分析上传截图的多模态模型，留空则使用主模型
+                      </p>
+                    </div>
                   </>
                 )}
 

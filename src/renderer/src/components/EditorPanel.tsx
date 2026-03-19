@@ -12,6 +12,7 @@ import { useAgent } from '@/hooks/useAgent'
 import { parsePages, getPageBody, getPageTitle, updatePageBody, addNewPage, getPageVersion, slugifyToBranchName, formatPageLabel } from '@/lib/page-utils'
 import { buildCopyMessage } from '@/services/prompt-builder'
 import { copyToClipboard } from '@/services/file-bridge'
+import { buildScreenshotCtxForPage } from '@/lib/screenshot-utils'
 import type { EditorHandle } from '@/hooks/useEditor'
 
 interface EditorPanelProps {
@@ -209,7 +210,8 @@ export function EditorPanel({ activeEditorRef, onUpdate, onSave, onRename, onOpe
                   onClick={(e) => {
                     e.stopPropagation()
                     const store = useDocumentStore.getState()
-                    const msg = buildCopyMessage(store.filePath || '', page.name, i)
+                    const ssCtx = store.filePath ? buildScreenshotCtxForPage(store.filePath, store.content, i) : null
+                    const msg = buildCopyMessage(store.filePath || '', page.name, i, ssCtx)
                     copyToClipboard(msg)
                   }}
                   className="text-[11px] text-text-muted hover:text-accent-green font-mono cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-accent-green/10"
@@ -289,7 +291,8 @@ function RunButton({ filePath, pageName, pageIndex }: {
       const cwd = getCwd()
 
       // Build claude command
-      const msg = buildCopyMessage(filePath, pageName, pageIndex)
+      const ssCtx = buildScreenshotCtxForPage(filePath, docContent, pageIndex)
+      const msg = buildCopyMessage(filePath, pageName, pageIndex, ssCtx)
       const escapedMsg = msg.replace(/'/g, "'\\''")
 
       setStatus(pageName, 'running')
@@ -326,7 +329,9 @@ function RunButton({ filePath, pageName, pageIndex }: {
 
   const handleExternal = (app: string) => {
     if (!filePath) return
-    const msg = buildCopyMessage(filePath, pageName, pageIndex)
+    const docContent = useDocumentStore.getState().content
+    const ssCtx = buildScreenshotCtxForPage(filePath, docContent, pageIndex)
+    const msg = buildCopyMessage(filePath, pageName, pageIndex, ssCtx)
     const cwd = getCwd()
     window.api.terminal.sendExternal(app, msg, cwd)
     setStatus(pageName, 'running')

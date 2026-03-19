@@ -50,6 +50,7 @@ interface AgentStore {
   switchToPage: (pageIndex: number) => void
   clearCurrent: () => void
   loadFromFile: (docPath: string) => Promise<void>
+  replaceSessions: (sessions: AgentSession[]) => void
   _loadRaw: (raw: string) => void
   reset: () => void
 }
@@ -289,6 +290,22 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     } catch {
       // Corrupted data — ignore
     }
+  },
+
+  replaceSessions: (newSessions) => {
+    const { sessions } = get()
+    // Find which page is currently active
+    const latest = sessions[sessions.length - 1]
+    const pageIndex = latest?.pageIndex ?? 0
+    const pageSessions = newSessions.filter((s) => s.pageIndex === pageIndex)
+    const latestForPage = pageSessions[pageSessions.length - 1]
+
+    set({
+      sessions: newSessions,
+      currentQuestions: latestForPage?.questions ?? [],
+      completeness: latestForPage?.completeness ?? null
+    })
+    scheduleSave(newSessions)
   },
 
   reset: () => {

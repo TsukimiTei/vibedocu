@@ -9,6 +9,7 @@ import { buildCopyMessage } from '@/services/prompt-builder'
 import { toast } from './ui/Toast'
 import { getFileName } from '@/lib/utils'
 import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
+import { buildScreenshotCtxForPage } from '@/lib/screenshot-utils'
 
 interface EditorToolbarProps {
   onUpdate: () => void
@@ -56,7 +57,12 @@ export function EditorToolbar({ onUpdate, onSave, onOpenSettings, onRename }: Ed
   const currentPageName = pages[activePageIndex]?.name || 'Base PRD'
   const currentPageTitle = getPageTitle(content, activePageIndex)
   const currentPageLabel = formatPageLabel(activePageIndex, currentPageTitle, currentPageName)
-  const message = filePath && content ? buildCopyMessage(filePath, currentPageName, activePageIndex) : ''
+  // Build copy message with screenshot context
+  const message = (() => {
+    if (!filePath || !content) return ''
+    const ssCtx = buildScreenshotCtxForPage(filePath, content, activePageIndex)
+    return buildCopyMessage(filePath, currentPageName, activePageIndex, ssCtx)
+  })()
 
   const handleCopyPath = async () => {
     if (filePath) {

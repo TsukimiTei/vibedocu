@@ -1,8 +1,10 @@
 import { useTerminalStore } from '@/stores/terminal-store'
 import { useDocumentStore } from '@/stores/document-store'
 import { usePageStatusStore } from '@/stores/page-status-store'
+import { useScreenshotStore } from '@/stores/screenshot-store'
 import { AgentPanel } from './AgentPanel'
 import { TerminalView } from './TerminalView'
+import { ScreenshotPanel } from './ScreenshotPanel'
 import { parsePages, getPageTitle, formatPageLabel } from '@/lib/page-utils'
 
 import type { UpdateDocumentAnswerFn } from '@/lib/qa-utils'
@@ -17,6 +19,7 @@ export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: 
   const activeTab = useTerminalStore((s) => s.activeTab)
   const switchToAsk = useTerminalStore((s) => s.switchToAsk)
   const switchToTerminal = useTerminalStore((s) => s.switchToTerminal)
+  const switchToScreenshots = useTerminalStore((s) => s.switchToScreenshots)
   const allSessions = useTerminalStore((s) => s.sessions)
 
   const activePageIndex = useDocumentStore((s) => s.activePageIndex)
@@ -33,6 +36,7 @@ export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: 
 
   const hasSession = !!allSessions[currentPageName]
   const pageStatus = usePageStatusStore((s) => s.getStatus(currentPageName))
+  const screenshotCount = useScreenshotStore((s) => s.manifest.screenshots.length)
 
   // Terminal tab status indicator dot
   const terminalStatusDot = hasSession ? (
@@ -58,6 +62,19 @@ export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: 
             Ask
           </button>
           <button
+            onClick={switchToScreenshots}
+            className={`flex-1 text-[12px] font-mono py-1.5 px-2 rounded transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+              activeTab === 'screenshots'
+                ? 'bg-bg-primary text-text-primary shadow-sm'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Shots
+            {screenshotCount > 0 && (
+              <span className="text-[10px] text-text-muted bg-bg-secondary px-1 rounded">{screenshotCount}</span>
+            )}
+          </button>
+          <button
             onClick={switchToTerminal}
             className={`flex-1 text-[12px] font-mono py-1.5 px-3 rounded transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
               activeTab === 'terminal'
@@ -77,6 +94,10 @@ export function LeftPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: 
       <div className="flex-1 min-h-0 overflow-hidden relative">
         <div className={`h-full ${activeTab === 'ask' ? '' : 'hidden'}`}>
           <AgentPanel onInsert={onInsert} onOpenSettings={onOpenSettings} onUpdateDocumentAnswer={onUpdateDocumentAnswer} />
+        </div>
+
+        <div className={`h-full ${activeTab === 'screenshots' ? '' : 'hidden'}`}>
+          <ScreenshotPanel />
         </div>
 
         <div className={`h-full flex flex-col ${activeTab === 'terminal' ? '' : 'hidden'}`}>

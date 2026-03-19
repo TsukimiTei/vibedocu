@@ -13,6 +13,7 @@ import { useAgentStore } from '@/stores/agent-store'
 import { useSmartAgentStore } from '@/stores/smart-agent-store'
 import { appendQARecord } from '@/services/style-service'
 import { extractAnswerText, buildQABlock, type UpdateDocumentAnswerFn } from '@/lib/qa-utils'
+import { ImageRefText } from './ImageRefText'
 
 interface QuestionCardProps {
   question: Question
@@ -442,7 +443,7 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
           'text-sm leading-snug mb-1',
           reopened ? 'text-text-primary font-semibold' : 'text-text-secondary'
         )}>
-          {question.text}
+          <ImageRefText text={question.text} />
         </h3>
 
         {/* Answer summary — visible when collapsed */}
@@ -555,7 +556,9 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
         )}
       </div>
 
-      <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">{question.text}</h3>
+      <h3 className="text-base font-semibold text-text-primary leading-snug mb-3">
+        <ImageRefText text={question.text} />
+      </h3>
 
       {/* Action buttons: explain question + add to doc — single row */}
       <div className="flex gap-2 mb-4">

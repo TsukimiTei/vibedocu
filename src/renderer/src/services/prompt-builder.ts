@@ -121,20 +121,44 @@ export function buildPartialAnalysisPrompt(
 export function buildCopyMessage(
   filePath: string,
   pageName: string,
-  pageIndex: number
+  pageIndex: number,
+  screenshotContext?: {
+    screenshotsDir: string
+    manifestPath: string
+    referencedImages: Record<string, string>
+  } | null
 ): string {
+  let msg: string
+
   if (pageIndex > 0) {
-    return `I have a requirements document at: ${filePath}
+    msg = `I have a requirements document at: ${filePath}
 
 Please read this file. The document contains multiple pages separated by \`---\` followed by \`# [Page Name]\` headers.
 
 Use the "Base PRD" section (content before the first \`---\` page break) as background context, then focus on implementing the feature described in the page titled "${pageName}" (the section starting with \`# [${pageName}]\`).
 
 Only implement the requirements from the "${pageName}" page.`
-  }
-
-  return `I have a requirements document at: ${filePath}
+  } else {
+    msg = `I have a requirements document at: ${filePath}
 
 Please read this file and implement the project based on the "Base PRD" section (the content before the first \`---\` page break). Ignore any subsequent feature pages.`
+  }
+
+  // Append IMAGE_CONTEXT if there are referenced screenshots
+  if (screenshotContext && Object.keys(screenshotContext.referencedImages).length > 0) {
+    const refEntries = Object.entries(screenshotContext.referencedImages)
+      .map(([ref, filename]) => `${ref} → ${filename}`)
+      .join(', ')
+
+    msg += `
+
+---
+Image Context:
+- Screenshots Dir: ${screenshotContext.screenshotsDir}
+- Manifest: ${screenshotContext.manifestPath}
+- Referenced: ${refEntries}`
+  }
+
+  return msg
 }
 

@@ -9,7 +9,7 @@ export interface TerminalSession {
 
 interface TerminalStore {
   sessions: Record<string, TerminalSession>  // keyed by pageName
-  activeTab: 'ask' | 'terminal'
+  activeTab: 'ask' | 'terminal' | 'screenshots'
 
   createSession: (pageName: string, session: TerminalSession) => void
   getSession: (pageName: string) => TerminalSession | undefined
@@ -17,6 +17,7 @@ interface TerminalStore {
   hasSession: (pageName: string) => boolean
   switchToAsk: () => void
   switchToTerminal: () => void
+  switchToScreenshots: () => void
   reset: () => void
 }
 
@@ -49,6 +50,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
 
   switchToAsk: () => set({ activeTab: 'ask' }),
   switchToTerminal: () => set({ activeTab: 'terminal' }),
+  switchToScreenshots: () => set({ activeTab: 'screenshots' }),
   reset: () => {
     // Destroy all PTY sessions
     const sessions = get().sessions

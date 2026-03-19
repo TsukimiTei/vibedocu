@@ -126,6 +126,29 @@ const api = {
     },
     closeReady: (skipConfirm: boolean, saved: boolean) => ipcRenderer.send('window:close-ready', skipConfirm, saved)
   },
+  screenshot: {
+    readManifest: (docPath: string): Promise<string | null> =>
+      ipcRenderer.invoke('screenshot:readManifest', docPath),
+    writeManifest: (docPath: string, data: string): Promise<void> =>
+      ipcRenderer.invoke('screenshot:writeManifest', docPath, data),
+    save: (
+      docPath: string,
+      imageBuffer: ArrayBuffer,
+      filename: string
+    ): Promise<{ savedPath: string; relativePath: string }> =>
+      ipcRenderer.invoke('screenshot:save', docPath, imageBuffer, filename),
+    delete: (docPath: string, filename: string): Promise<void> =>
+      ipcRenderer.invoke('screenshot:delete', docPath, filename),
+    list: (docPath: string): Promise<string[]> =>
+      ipcRenderer.invoke('screenshot:list', docPath),
+    readBase64: (
+      docPath: string,
+      filename: string
+    ): Promise<{ base64: string; mimeType: string } | null> =>
+      ipcRenderer.invoke('screenshot:readBase64', docPath, filename),
+    getDir: (docPath: string): Promise<string> =>
+      ipcRenderer.invoke('screenshot:getDir', docPath)
+  },
   context: {
     scan: (
       projectDir: string,

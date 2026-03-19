@@ -30,6 +30,7 @@ interface SettingsStore {
   docProjectDirs: Record<string, string>
   smartAgentMode: SmartAgentMode
   styleHistoryDir: string
+  screenshotModel: string
 
   setAiMode: (mode: AiMode) => void
   setApiKey: (key: string) => void
@@ -45,6 +46,7 @@ interface SettingsStore {
   bindProjectDir: (docPath: string, dir: string) => void
   setSmartAgentMode: (mode: SmartAgentMode) => void
   setStyleHistoryDir: (dir: string) => void
+  setScreenshotModel: (model: string) => void
 }
 
 function applyTheme(theme: ThemeId) {
@@ -68,6 +70,7 @@ export const useSettingsStore = create<SettingsStore>()(
       docProjectDirs: {},
       smartAgentMode: 'off' as SmartAgentMode,
       styleHistoryDir: '',
+      screenshotModel: '',
 
       setAiMode: (mode) => set({ aiMode: mode }),
       setApiKey: (key) => set({ apiKey: key }),
@@ -109,7 +112,8 @@ export const useSettingsStore = create<SettingsStore>()(
           docProjectDirs: { ...state.docProjectDirs, [docPath]: dir }
         })),
       setSmartAgentMode: (mode) => set({ smartAgentMode: mode }),
-      setStyleHistoryDir: (dir) => set({ styleHistoryDir: dir })
+      setStyleHistoryDir: (dir) => set({ styleHistoryDir: dir }),
+      setScreenshotModel: (model) => set({ screenshotModel: model })
     }),
     {
       name: 'vibedocu-settings',
@@ -125,7 +129,8 @@ export const useSettingsStore = create<SettingsStore>()(
         pageOrderReversed: state.pageOrderReversed,
         docProjectDirs: state.docProjectDirs,
         smartAgentMode: state.smartAgentMode,
-        styleHistoryDir: state.styleHistoryDir
+        styleHistoryDir: state.styleHistoryDir,
+        screenshotModel: state.screenshotModel
         // projectDir intentionally excluded — per-window runtime state
       }),
       merge: (persisted, current) => ({

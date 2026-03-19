@@ -22,6 +22,15 @@ import { scanAllFiles, readFiles } from './context-service'
 import { createPtySession, writeToPty, resizePty, destroyPty } from './pty-service'
 import { sendToExternalTerminal } from './external-terminal'
 import { createWorktree } from './git-service'
+import {
+  readManifest,
+  writeManifest,
+  saveScreenshot,
+  deleteScreenshot,
+  listScreenshots,
+  readScreenshotBase64,
+  getScreenshotsDir
+} from './screenshot-service'
 import { clipboard } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -688,5 +697,37 @@ export function registerIpcHandlers(): void {
   // Git operations
   ipcMain.handle('git:createWorktree', async (_event, projectDir: string, branchName: string) => {
     return createWorktree(projectDir, branchName)
+  })
+
+  // Screenshot management
+  ipcMain.handle('screenshot:readManifest', async (_event, docPath: string) => {
+    return readManifest(docPath)
+  })
+
+  ipcMain.handle('screenshot:writeManifest', async (_event, docPath: string, data: string) => {
+    return writeManifest(docPath, data)
+  })
+
+  ipcMain.handle(
+    'screenshot:save',
+    async (_event, docPath: string, imageBuffer: ArrayBuffer, filename: string) => {
+      return saveScreenshot(docPath, Buffer.from(imageBuffer), filename)
+    }
+  )
+
+  ipcMain.handle('screenshot:delete', async (_event, docPath: string, filename: string) => {
+    return deleteScreenshot(docPath, filename)
+  })
+
+  ipcMain.handle('screenshot:list', async (_event, docPath: string) => {
+    return listScreenshots(docPath)
+  })
+
+  ipcMain.handle('screenshot:readBase64', async (_event, docPath: string, filename: string) => {
+    return readScreenshotBase64(docPath, filename)
+  })
+
+  ipcMain.handle('screenshot:getDir', async (_event, docPath: string) => {
+    return getScreenshotsDir(docPath)
   })
 }
