@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Question, CompletenessScore, AgentSession } from '@/types/agent'
 import { generateId } from '@/lib/utils'
+import { useDocumentStore } from '@/stores/document-store'
 
 export interface McpStep {
   id: string
@@ -16,19 +17,12 @@ export interface McpStats {
 }
 
 const MCP_PIPELINE_FULL: { id: string; label: string }[] = [
-  { id: 'analyze', label: 'AI 分析中' },
-  { id: 'save', label: '保存分析结果' }
+  { id: 'analyze', label: 'AI 分析中' }
 ]
 
 const MCP_PIPELINE_RESUME: { id: string; label: string }[] = [
-  { id: 'analyze', label: 'AI 重新分析中' },
-  { id: 'save', label: '保存分析结果' }
+  { id: 'analyze', label: 'AI 分析中' }
 ]
-
-// Map tool names to pipeline step ids
-const TOOL_TO_STEP: Record<string, string> = {
-  '保存分析结果': 'save'
-}
 
 interface AgentStore {
   sessions: AgentSession[]
@@ -39,6 +33,7 @@ interface AgentStore {
   mcpStartTime: number
   mcpStats: McpStats | null
   mcpActivity: string
+  mcpSummary: string
   error: string | null
 
   setLoading: (loading: boolean, resume?: boolean) => void
@@ -51,7 +46,7 @@ interface AgentStore {
   clearCurrent: () => void
   loadFromFile: (docPath: string) => Promise<void>
   replaceSessions: (sessions: AgentSession[]) => void
-  _loadRaw: (raw: string) => void
+  _loadRaw: (raw: string, finalStats?: McpStats) => void
   reset: () => void
 }
 
@@ -99,11 +94,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   mcpStartTime: 0,
   mcpStats: null,
   mcpActivity: '',
+  mcpSummary: '',
   error: null,
 
   setLoading: (loading, resume) => {
     if (!loading) {
-      set({ isLoading: false, mcpSteps: [], mcpActivity: '' })
+      set({ isLoading: false, mcpSteps: [], mcpActivity: '', mcpSummary: '' })
       return
     }
     // Only initialize MCP pipeline state when in MCP mode
@@ -117,10 +113,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         })),
         mcpStartTime: Date.now(),
         mcpStats: { durationMs: 0, turns: 0, inputTokens: 0, outputTokens: 0 },
-        mcpActivity: ''
+        mcpActivity: '',
+        mcpSummary: ''
       } : {
         mcpSteps: [],
-        mcpActivity: ''
+        mcpActivity: '',
+        mcpSummary: ''
       })
     })
   },
@@ -128,53 +126,38 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     try {
       const evt = JSON.parse(raw)
       set((s) => {
-        const steps = s.mcpSteps.map((st) => ({ ...st }))
-        let stats = s.mcpStats
+        let activity = s.mcpActivity
 
-        // Helper: mark a step by id (never regress from done)
-        const mark = (id: string, status: McpStep['status']) => {
-          const idx = steps.findIndex((st) => st.id === id)
-          if (idx >= 0 && !(steps[idx].status === 'done' && status !== 'done')) {
-            steps[idx].status = status
+        if (evt.step === 'delta') {
+          const accumulated = s.mcpSummary + (evt.text || '')
+          const sepIdx = accumulated.indexOf('---JSON---')
+          const visibleSummary = sepIdx >= 0 ? accumulated.slice(0, sepIdx).trim() : accumulated
+          return {
+            mcpSummary: accumulated,
+            mcpActivity: visibleSummary.length > 80 ? visibleSummary.slice(visibleSummary.length - 80) : visibleSummary
           }
         }
 
-        let activity = s.mcpActivity
-
-        if (evt.step === 'tool') {
-          const stepId = TOOL_TO_STEP[evt.name]
-          if (!stepId) return s
-
-          if (evt.status === 'running') {
-            mark(stepId, 'running')
-            activity = evt.name
-          } else if (evt.status === 'done') {
-            mark(stepId, 'done')
-            activity = ''
-            if (stepId === 'save') {
-              mark('analyze', 'done')
-            }
-          }
-        } else if (evt.step === 'thinking') {
+        if (evt.step === 'thinking') {
           activity = '思考中...'
         } else if (evt.step === 'text') {
-          // Show brief snippet of AI output
           const text = (evt.text || '').replace(/\n/g, ' ').trim()
           if (text) activity = text.length > 40 ? text.slice(0, 40) + '...' : text
         } else if (evt.step === 'result') {
-          activity = ''
-          for (const st of steps) { st.status = 'done' }
-          stats = {
-            durationMs: evt.durationMs || 0,
-            turns: evt.turns || 0,
-            inputTokens: evt.inputTokens || 0,
-            outputTokens: evt.outputTokens || 0
+          return {
+            mcpSteps: [],
+            mcpStats: {
+              durationMs: evt.durationMs || 0,
+              turns: evt.turns || 0,
+              inputTokens: evt.inputTokens || 0,
+              outputTokens: evt.outputTokens || 0
+            },
+            mcpActivity: '',
+            isLoading: false
           }
-          // Result event is the definitive completion signal — stats are final
-          return { mcpSteps: [], mcpStats: stats, mcpActivity: '', isLoading: false }
         }
 
-        return { mcpSteps: steps, mcpStats: stats, mcpActivity: activity }
+        return { mcpSteps: s.mcpSteps, mcpStats: s.mcpStats, mcpActivity: activity }
       })
     } catch { /* ignore */ }
   },
@@ -262,9 +245,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     }
   },
 
-  _loadRaw: (raw: string) => {
+  _loadRaw: (raw: string, finalStats?: McpStats) => {
     try {
       const sessions: AgentSession[] = JSON.parse(raw)
+      console.log('[agent-store:_loadRaw] sessions:', sessions.length, 'raw length:', raw.length, 'finalStats:', !!finalStats)
       if (!Array.isArray(sessions) || sessions.length === 0) return
       // Migrate old string[] options to QuestionOption[] format
       for (const session of sessions) {
@@ -276,16 +260,50 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           }
         }
       }
-      // Restore latest session as current view
-      const latest = sessions[sessions.length - 1]
+
+      // Preserve answered state from in-memory questions.
+      // Disk data (from saveAnalysis) doesn't include answered/answer fields,
+      // so _loadRaw from file watcher would revert user answers. Merge them back.
+      const currentQs = get().currentQuestions
+      const answeredMap = new Map<string, { answered: boolean; answer?: string }>()
+      for (const q of currentQs) {
+        if (q.answered) {
+          answeredMap.set(q.id, { answered: true, answer: q.answer })
+        }
+      }
+      if (answeredMap.size > 0) {
+        for (const session of sessions) {
+          for (const q of session.questions) {
+            const mem = answeredMap.get(q.id)
+            if (mem && !q.answered) {
+              q.answered = mem.answered
+              q.answer = mem.answer
+            }
+          }
+        }
+      }
+
+      // Only update visible questions if the new data matches the current page
+      const visiblePage = useDocumentStore.getState().activePageIndex
+      const pageSessions = sessions.filter((s) => s.pageIndex === visiblePage)
+      const latest = pageSessions[pageSessions.length - 1]
+      console.log('[agent-store:_loadRaw] visiblePage:', visiblePage, 'pageSessions:', pageSessions.length, 'latest questions:', latest?.questions?.length)
       const update: Partial<AgentStore> = {
         sessions,
-        currentQuestions: latest.questions,
-        completeness: latest.completeness,
-        error: null
+        error: null,
+        ...(latest ? {
+          currentQuestions: latest.questions,
+          completeness: latest.completeness
+        } : {}),
+        // When finalStats is provided, atomically clear loading + set stats in the same render
+        ...(finalStats ? {
+          isLoading: false,
+          mcpSteps: [],
+          mcpStats: finalStats,
+          mcpActivity: '',
+          mcpSummary: ''
+        } : {})
       }
-      // Don't clear isLoading here — let pushMcpEvent's result event be the
-      // single source of truth for completion (it also sets final mcpStats).
       set(update)
     } catch {
       // Corrupted data — ignore
@@ -318,6 +336,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       mcpStartTime: 0,
       mcpStats: null,
       mcpActivity: '',
+      mcpSummary: '',
       error: null
     })
   }

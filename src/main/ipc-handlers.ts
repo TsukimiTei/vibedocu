@@ -1,6 +1,7 @@
 import { ipcMain, app, BrowserWindow } from 'electron'
 import { watch, type FSWatcher } from 'fs'
 import { spawn, type ChildProcess } from 'child_process'
+import { saveAnalysis } from '../mcp-server/tools/analysis'
 import {
   readFile,
   writeFile,
@@ -14,7 +15,7 @@ import {
   readPageStatusData,
   writePageStatusData,
   readStyleProfile,
-  writeStyleProfile
+  writeStyleProfile,
 } from './file-service'
 import { openFileDialog, chooseDirectoryDialog } from './dialog-service'
 import { checkSyncConflict, syncToVault, syncFileExists, renameSyncedFile } from './sync-service'
@@ -298,14 +299,11 @@ export function registerIpcHandlers(): void {
   // MCP: session-aware claude process management
   let claudeProcess: ChildProcess | null = null
   let warmProcess: ChildProcess | null = null
-  let warmDocPath: string | null = null
   let cachedClaudePath: string | null = null
   let isWarming = false
   let warmIdleTimer: ReturnType<typeof setTimeout> | null = null
   const WARM_IDLE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
-  const DEFAULT_MAX_TURNS = 3
-
-  const ALLOWED_TOOLS = 'mcp__vibedocs__vibedocs_save_analysis'
+  const DEFAULT_MAX_TURNS = 1
 
 
   function makeCleanEnv(): NodeJS.ProcessEnv {
@@ -316,6 +314,8 @@ export function registerIpcHandlers(): void {
         delete env[key]
       }
     }
+    // Disable OMC hooks to prevent injecting varying context that breaks prompt caching
+    env.DISABLE_OMC = '1'
     return env
   }
 
@@ -352,54 +352,258 @@ export function registerIpcHandlers(): void {
     return found || null
   }
 
-  function buildClaudeArgs(maxTurns?: number): string[] {
+  /**
+   * Repair common JSON issues from LLM output:
+   * - Unescaped double quotes inside string values
+   * - Unescaped backslashes
+   * - Literal newlines/tabs inside strings
+   * - Control characters
+   */
+  function repairJSON(json: string): string {
+    // Phase 1: Remove control characters (except \n \r \t which we handle in phase 2)
+    let cleaned = json.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
+
+    // Phase 2: State-machine repair for unescaped characters inside strings
+    const result: string[] = []
+    let inString = false
+    let escaped = false
+    for (let i = 0; i < cleaned.length; i++) {
+      const ch = cleaned[i]
+      if (escaped) { result.push(ch); escaped = false; continue }
+      if (ch === '\\' && inString) {
+        // Check if this is a valid escape sequence
+        const next = cleaned[i + 1]
+        if (next && '"\\\/bfnrtu'.includes(next)) {
+          result.push(ch)
+          escaped = true
+        } else {
+          // Invalid escape — double the backslash
+          result.push('\\\\')
+        }
+        continue
+      }
+      if (ch === '"') {
+        if (!inString) {
+          inString = true
+          result.push(ch)
+        } else {
+          const rest = cleaned.slice(i + 1).trimStart()
+          if (!rest || ':,]}'.includes(rest[0])) {
+            inString = false
+            result.push(ch)
+          } else {
+            result.push('\\"')
+          }
+        }
+      } else if (inString && (ch === '\n' || ch === '\r')) {
+        // Literal newline inside string — escape it
+        result.push(ch === '\n' ? '\\n' : '\\r')
+      } else if (inString && ch === '\t') {
+        result.push('\\t')
+      } else {
+        result.push(ch)
+      }
+    }
+    return result.join('')
+  }
+
+  function extractJSON(text: string): any {
+    // Split on ---JSON--- separator first to avoid braces in summary text
+    const sepIdx = text.indexOf('---JSON---')
+    let jsonPart = sepIdx >= 0 ? text.slice(sepIdx + '---JSON---'.length) : text
+
+    let cleaned = jsonPart.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    const start = cleaned.indexOf('{')
+    const end = cleaned.lastIndexOf('}')
+    if (start !== -1 && end > start) {
+      cleaned = cleaned.slice(start, end + 1)
+    }
+    cleaned = cleaned.replace(/,\s*([}\]])/g, '$1')
+    try {
+      return JSON.parse(cleaned)
+    } catch {
+      // Try repairing unescaped quotes and retry
+      return JSON.parse(repairJSON(cleaned))
+    }
+  }
+
+  const DIMENSIONS = [
+    'Problem Statement', 'Target Users', 'User Stories', 'Functional Requirements',
+    'Non-Functional Requirements', 'Technical Constraints', 'Edge Cases', 'Success Metrics'
+  ]
+
+  function expandCompactJSON(compact: any): { questions: any[]; completeness: any } {
+    if (compact.questions) return compact
+
+    const questions = (compact.q || []).map((q: any) => ({
+      type: q.t === 'mc' ? 'multiple-choice' : 'open-ended',
+      text: q.x,
+      category: DIMENSIONS[q.c] || DIMENSIONS[0],
+      options: q.o ? q.o.map((text: string) => ({ text })) : undefined
+    }))
+
+    const breakdown = DIMENSIONS.map((dim, i) => ({
+      dimension: dim,
+      score: compact.s?.b?.[i] ?? 0,
+      suggestion: compact.s?.g?.[i] ?? ''
+    }))
+
+    return {
+      questions,
+      completeness: { overall: compact.s?.o ?? 0, breakdown }
+    }
+  }
+
+  async function handleResultAndResolve(
+    resultText: string,
+    docPath: string,
+    pageIndex: number,
+    win: BrowserWindow | null,
+    stats: { durationMs: number; turns: number; inputTokens: number; outputTokens: number },
+    send: (data: any) => void,
+    resolve: (value: any) => void
+  ) {
+    let saved = false
+    let parseError: string | undefined
+    try {
+      const parsed = extractJSON(resultText)
+      const expanded = expandCompactJSON(parsed)
+      if (expanded.questions && expanded.completeness) {
+        await saveAnalysis(docPath, pageIndex, expanded)
+        saved = true
+        console.log('[mcp] saved analysis directly, questions:', expanded.questions.length)
+      } else {
+        parseError = 'Missing required fields: questions or completeness'
+        console.error('[mcp] parsed JSON missing required fields')
+      }
+    } catch (err) {
+      parseError = err instanceof Error ? err.message : 'JSON parse failed'
+      console.error('[mcp] failed to parse/save analysis from result text:', err)
+      console.error('[mcp] raw resultText:', resultText.slice(0, 2000))
+    }
+    // Read updated agent data to include in response
+    let agentData: string | null = null
+    if (saved) {
+      try {
+        agentData = await readAgentData(docPath)
+      } catch { /* ignore */ }
+      // Also push via IPC for file watcher listeners
+      if (agentData && win && !win.isDestroyed()) {
+        win.webContents.send('agent:changed', agentData)
+      }
+    }
+    // Don't send step:'result' via mcp:progress — let renderer's handleAnalysisResult
+    // update questions and isLoading atomically to avoid flash of empty state
+    if (saved) {
+      resolve({ success: true, stats, agentData })
+    } else {
+      resolve({ success: false, error: parseError, rawText: resultText, stats })
+    }
+  }
+
+  const SYSTEM_PROMPT_FOR_CLI = `你是一位资深产品需求分析师。你的任务是阅读用户提供的 markdown 文档，帮助用户不断完善需求，直到文档详细到可以直接交给 Coding Agent 高质量实现。
+
+请用中文提问和分析。
+
+从以下 8 个维度评估文档完成度：
+0. 问题陈述 (Problem Statement) - 核心问题是否清晰定义？
+1. 目标用户 (Target Users) - 用户画像是否明确？
+2. 用户故事 (User Stories) - 有没有具体的使用场景？
+3. 功能需求 (Functional Requirements) - 功能和行为是否详细？
+4. 非功能需求 (Non-Functional Requirements) - 性能、安全、可访问性？
+5. 技术约束 (Technical Constraints) - 技术栈、集成、部署？
+6. 边界情况 (Edge Cases) - 异常处理、边界条件？
+7. 成功指标 (Success Metrics) - 如何衡量成功？
+
+规则：
+- 最多返回 5 个问题
+- 问题要具体、可操作
+- 尽可能多地生成选择题（mc），只有在完全无法给出合理选项时才使用开放题（oe）
+- 判断标准：如果一个问题的答案可以归纳为 2-4 个明确的方向或选项，就必须设为选择题并提供具体选项
+- 选择题提供 2-4 个现实、具体的选项
+- 当多个选项可以同时选择时，在最后增加一个 "以上都要" 选项
+- 各维度评分 0-100
+- o 是加权平均
+- 优先关注最薄弱的维度
+- JSON 字符串值中禁止使用双引号，用单引号或「」代替
+
+输出格式要求：
+1. 先用 2-3 句中文总结你对文档的整体判断（这部分会实时展示给用户看）
+2. 然后输出分隔符 ---JSON---
+3. 最后输出精简 JSON 结果
+
+精简 JSON 格式：
+{"q":[{"t":"mc","x":"问题文本","c":0,"o":["选项A","选项B","以上都要"]},{"t":"oe","x":"问题文本","c":3}],"s":{"o":35,"b":[60,20,10,40,0,30,0,10],"g":["建议1","建议2","建议3","建议4","建议5","建议6","建议7","建议8"]}}
+
+字段说明：
+- q=问题列表, t=类型(mc选择题/oe开放题), x=问题文本, c=维度索引(0-7), o=选项文本数组
+- s=评分, o=总分, b=8维度分数数组(按上述0-7顺序), g=8维度建议数组
+
+示例输出：
+文档对核心问题描述清晰，但功能需求缺少具体交互流程，边界情况完全未覆盖。建议优先补充用户故事和异常处理逻辑。
+---JSON---
+{"q":[{"t":"mc","x":"目标用户主要是哪类人群？","c":1,"o":["独立开发者","企业团队","设计师","以上都要"]}],"s":{"o":35,"b":[60,20,10,40,0,30,0,10],"g":["核心问题描述清晰","需补充用户画像","缺少使用场景","功能列表不完整","未提及性能要求","未明确技术栈","未考虑异常情况","缺少成功指标"]}}`
+
+  interface ClaudeSessionEntry {
+    sessionId: string
+    contextHash: string
+    analysisCount: number
+    createdAt: number
+    lastUsedAt: number
+  }
+
+  // In-memory session cache (no disk persistence — sessions live only while app runs)
+  const claudeSessionsMap = new Map<string, ClaudeSessionEntry>()
+
+  function sessionKey(docPath: string, pageIndex: number): string {
+    return `${docPath}:${pageIndex}`
+  }
+
+  function buildClaudeArgs(maxTurns?: number, resumeSessionId?: string): string[] {
     const args = [
       '-p', '--verbose',
       '--output-format', 'stream-json',
-      '--allowedTools', ALLOWED_TOOLS
+      '--include-partial-messages',
+      '--tools', '',
+      '--system-prompt', SYSTEM_PROMPT_FOR_CLI,
+      '--strict-mcp-config',
+      '--plugin-dir', '/dev/null',
+      '--setting-sources', '',
+      '--disable-slash-commands'
     ]
+    if (resumeSessionId) {
+      args.push('--resume', resumeSessionId)
+    }
     if (maxTurns != null) {
       args.push('--max-turns', String(maxTurns))
     }
     return args
   }
 
-  function spawnForDoc(claudePath: string, maxTurns?: number): ChildProcess {
-    console.log('[mcp] spawn: maxTurns=%s', maxTurns || 'unlimited')
-    return spawn(claudePath, buildClaudeArgs(maxTurns), {
+  function spawnForDoc(claudePath: string, maxTurns?: number, resumeSessionId?: string): ChildProcess {
+    console.log('[mcp] spawn: maxTurns=%s, resume=%s', maxTurns || 'unlimited', resumeSessionId || 'none')
+    return spawn(claudePath, buildClaudeArgs(maxTurns, resumeSessionId), {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: makeCleanEnv()
     })
   }
 
-  async function warmUp(docPath?: string): Promise<void> {
+  async function warmUp(): Promise<void> {
     if (warmProcess || isWarming) return
     isWarming = true
     try {
       const claudePath = await findClaudeBinary()
       if (!claudePath || warmProcess) return
 
-      const targetDoc = docPath || null
-      if (targetDoc) {
-        console.log('[mcp:warmup] pre-spawning warm process')
-        warmProcess = spawnForDoc(claudePath, DEFAULT_MAX_TURNS)
-      } else {
-        // Generic warm — no session
-        console.log('[mcp:warmup] pre-spawning generic process')
-        warmProcess = spawn(claudePath, [
-          '-p', '--verbose', '--output-format', 'stream-json',
-          '--allowedTools', ALLOWED_TOOLS,
-          '--max-turns', String(DEFAULT_MAX_TURNS)
-        ], { stdio: ['pipe', 'pipe', 'pipe'], env: makeCleanEnv() })
-      }
-      warmDocPath = targetDoc
-      warmProcess.on('close', () => { warmProcess = null; warmDocPath = null; if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null } })
-      warmProcess.on('error', () => { warmProcess = null; warmDocPath = null; if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null } })
+      console.log('[mcp:warmup] pre-spawning warm process')
+      warmProcess = spawnForDoc(claudePath, DEFAULT_MAX_TURNS)
+      warmProcess.on('close', () => { warmProcess = null; if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null } })
+      warmProcess.on('error', () => { warmProcess = null; if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null } })
       warmProcess.stderr?.on('data', () => {})
       // Kill warm process if idle for too long
       if (warmIdleTimer) clearTimeout(warmIdleTimer)
       warmIdleTimer = setTimeout(() => {
-        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null; warmDocPath = null }
+        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null }
         warmIdleTimer = null
       }, WARM_IDLE_TIMEOUT)
     } finally {
@@ -412,32 +616,70 @@ export function registerIpcHandlers(): void {
     if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null }
   })
 
-  ipcMain.handle('mcp:warmup', async (_event, docPath?: string) => {
-    await warmUp(docPath)
+  ipcMain.handle('mcp:warmup', async () => {
+    await warmUp()
   })
 
-  ipcMain.handle('mcp:analyze', async (_event, prompt: string, docPath: string, options?: { maxTurns?: number }) => {
+  ipcMain.handle('mcp:analyze', async (_event, prompt: string, docPath: string, options?: { maxTurns?: number; pageIndex?: number; resume?: boolean; contextHash?: string }) => {
     if (claudeProcess) {
-      return { success: false, error: 'Analysis already in progress' }
+      const stale = claudeProcess as any
+      if (stale.exitCode !== undefined && (stale.exitCode !== null || stale.killed)) {
+        console.warn('[mcp:analyze] clearing stale claudeProcess (exitCode=%s, killed=%s)', stale.exitCode, stale.killed)
+        claudeProcess = null
+      } else {
+        return { success: false, error: 'Analysis already in progress' }
+      }
     }
 
-    // Synchronous sentinel to prevent race conditions from rapid calls
-    const sentinel = {} as any
+    const sentinel = { __sentinel: true } as any
     claudeProcess = sentinel
 
     const win = BrowserWindow.fromWebContents(_event.sender)
+    const pageIndex = options?.pageIndex ?? 0
+    const wantResume = options?.resume === true
+    const contextHash = options?.contextHash || ''
+
+    // Resolve session for --resume (in-memory only)
+    let resumeSessionId: string | undefined
+    if (wantResume) {
+      const key = sessionKey(docPath, pageIndex)
+      const entry = claudeSessionsMap.get(key)
+      if (entry) {
+        const hashMatch = !contextHash || entry.contextHash === contextHash
+        const countOk = entry.analysisCount < 50
+        if (hashMatch && countOk) {
+          resumeSessionId = entry.sessionId
+          console.log('[mcp:analyze] resuming session %s (count=%d)', resumeSessionId, entry.analysisCount)
+        } else {
+          console.log('[mcp:analyze] session invalidated (hashMatch=%s, count=%d)', hashMatch, entry.analysisCount)
+          claudeSessionsMap.delete(key)
+        }
+      }
+    }
 
     try {
       let proc: ChildProcess
 
       const effectiveMaxTurns = options?.maxTurns ?? DEFAULT_MAX_TURNS
-      if (warmProcess && effectiveMaxTurns <= DEFAULT_MAX_TURNS) {
+      if (resumeSessionId) {
+        // Resume path: cold start with --resume (skip warm process)
+        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null }
+        if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null }
+        const claudePath = await findClaudeBinary()
+        if (!claudePath) {
+          claudeProcess = null
+          return { success: false, error: '找不到 claude 命令，请确认已安装 Claude Code CLI' }
+        }
+        console.log('[mcp:analyze] resume start (maxTurns=%d, session=%s)', effectiveMaxTurns, resumeSessionId)
+        proc = spawnForDoc(claudePath, effectiveMaxTurns, resumeSessionId)
+      } else if (warmProcess && effectiveMaxTurns <= DEFAULT_MAX_TURNS) {
         console.log('[mcp:analyze] using pre-warmed process (maxTurns=%d)', DEFAULT_MAX_TURNS)
         proc = warmProcess
         warmProcess = null
-        warmDocPath = null
+        if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null }
       } else {
-        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null; warmDocPath = null }
+        if (warmProcess) { warmProcess.kill('SIGTERM'); warmProcess = null }
+        if (warmIdleTimer) { clearTimeout(warmIdleTimer); warmIdleTimer = null }
         const claudePath = await findClaudeBinary()
         if (!claudePath) {
           claudeProcess = null
@@ -450,19 +692,60 @@ export function registerIpcHandlers(): void {
       claudeProcess = proc
 
       return new Promise((resolve) => {
+        console.log('[mcp:debug] prompt length: %d chars, resume: %s', prompt.length, !!resumeSessionId)
+        console.log('[mcp:debug] prompt preview:', prompt.slice(0, 200))
+
         proc.stdin?.write(prompt)
         proc.stdin?.end()
 
         let stderr = ''
         let lineBuf = ''
         let resolved = false
-        const toolIdMap: Record<string, string> = {}
-        const toolLabels: Record<string, string> = {
-          vibedocs_save_analysis: '保存分析结果'
-        }
-
+        let capturedSessionId: string | undefined
         const send = (data: any) => {
           if (win && !win.isDestroyed()) win.webContents.send('mcp:progress', JSON.stringify(data))
+        }
+
+        const handleResult = async (evt: any) => {
+          const usage = evt.usage || {}
+          const resultStats = {
+            durationMs: evt.duration_ms || 0,
+            turns: evt.num_turns || 0,
+            inputTokens: usage.input_tokens || 0,
+            outputTokens: usage.output_tokens || 0
+          }
+          console.log('[mcp:result] stats:', JSON.stringify(resultStats))
+          console.log('[mcp:result] session_id:', evt.session_id || 'none')
+          console.log('[mcp:result] full usage:', JSON.stringify(evt.usage))
+
+          if (evt.session_id) {
+            capturedSessionId = evt.session_id
+          }
+
+          if (claudeProcess === proc) claudeProcess = null
+          if (!resolved) {
+            resolved = true
+            const resultText = typeof evt.result === 'string' ? evt.result : ''
+
+            // Save session in memory for future --resume
+            if (capturedSessionId) {
+              const key = sessionKey(docPath, pageIndex)
+              const existing = claudeSessionsMap.get(key)
+              claudeSessionsMap.set(key, {
+                sessionId: capturedSessionId,
+                contextHash: contextHash,
+                analysisCount: (existing?.sessionId === capturedSessionId ? existing.analysisCount : 0) + 1,
+                createdAt: existing?.sessionId === capturedSessionId ? existing.createdAt : Date.now(),
+                lastUsedAt: Date.now()
+              })
+              console.log('[mcp:analyze] saved session %s for page %d', capturedSessionId, pageIndex)
+            }
+
+            await handleResultAndResolve(resultText, docPath, pageIndex, win, resultStats, send, (val: any) => {
+              if (capturedSessionId) val.sessionId = capturedSessionId
+              resolve(val)
+            })
+          }
         }
 
         proc.stdout?.on('data', (d) => {
@@ -475,54 +758,31 @@ export function registerIpcHandlers(): void {
             let evt: any = null
             try { evt = JSON.parse(line) } catch { continue }
 
-            if (evt.type === 'result') {
-              console.log('[mcp:result-full]', JSON.stringify({ usage: evt.usage, num_turns: evt.num_turns, duration_ms: evt.duration_ms }))
+            if (evt.type === 'system') {
+              console.log('[mcp:stream] system:', evt.subtype, JSON.stringify(evt).slice(0, 300))
+              continue
             }
+            if (evt.type === 'rate_limit_event') continue
 
-            if (evt.type === 'system' || evt.type === 'rate_limit_event') continue
+            if (evt.type === 'stream_event') {
+              const inner = evt.event
+              if (inner?.type === 'content_block_delta' && inner.delta?.type === 'text_delta') {
+                console.log('[mcp:delta] text:', (inner.delta.text || '').slice(0, 30))
+                send({ step: 'delta', text: inner.delta.text })
+              }
+              continue
+            }
 
             if (evt.type === 'assistant') {
               for (const block of (evt.message?.content || [])) {
-                if (block.type === 'tool_use') {
-                  const raw = (block.name || '').replace('mcp__vibedocs__', '')
-                  const label = toolLabels[raw] || raw
-                  if (block.id) toolIdMap[block.id] = label
-                  send({ step: 'tool', name: label, status: 'running' })
+                if (block.type === 'thinking') {
+                  send({ step: 'thinking' })
                 } else if (block.type === 'text' && block.text) {
                   send({ step: 'text', text: block.text })
-                } else if (block.type === 'thinking') {
-                  send({ step: 'thinking' })
-                }
-              }
-            } else if (evt.type === 'user' && evt.message?.content) {
-              for (const block of evt.message.content) {
-                if (block.type === 'tool_result' && block.tool_use_id) {
-                  const label = toolIdMap[block.tool_use_id]
-                  if (label) send({ step: 'tool', name: label, status: 'done' })
                 }
               }
             } else if (evt.type === 'result') {
-              const usage = evt.usage || {}
-              send({
-                step: 'result',
-                text: typeof evt.result === 'string' ? evt.result : '',
-                durationMs: evt.duration_ms,
-                turns: evt.num_turns,
-                inputTokens: usage.input_tokens || 0,
-                outputTokens: usage.output_tokens || 0
-              })
-              // Clear process reference on result (before close event fires)
-              claudeProcess = null
-              if (!resolved) {
-                resolved = true
-                readAgentData(docPath).then((agentData) => {
-                  if (agentData && win && !win.isDestroyed()) {
-                    win.webContents.send('agent:changed', agentData)
-                  }
-                }).catch(() => {}).finally(() => {
-                  resolve({ success: true })
-                })
-              }
+              handleResult(evt)
             }
           }
         })
@@ -533,52 +793,48 @@ export function registerIpcHandlers(): void {
 
         proc.on('close', async (code) => {
           console.log('[mcp:analyze] exited with code:', code)
-          claudeProcess = null
-          // Flush remaining line buffer (e.g. result event without trailing newline)
-          if (lineBuf.trim()) {
+          if (claudeProcess === proc) claudeProcess = null
+          if (lineBuf.trim() && !resolved) {
             try {
               const evt = JSON.parse(lineBuf)
               if (evt.type === 'result') {
-                const fUsage = evt.usage || {}
-                send({
-                  step: 'result',
-                  text: typeof evt.result === 'string' ? evt.result : '',
-                  durationMs: evt.duration_ms,
-                  turns: evt.num_turns,
-                  inputTokens: fUsage.input_tokens || 0,
-                  outputTokens: fUsage.output_tokens || 0
-                })
+                await handleResult(evt)
+                lineBuf = ''
+                warmUp().catch(() => {})
+                return
               }
             } catch { /* not valid JSON, ignore */ }
             lineBuf = ''
           }
-          // Push agent data to renderer regardless
-          try {
-            const agentData = await readAgentData(docPath)
-            if (agentData && win && !win.isDestroyed()) {
-              win.webContents.send('agent:changed', agentData)
-            }
-          } catch { /* ignore */ }
-          // Resolve only if result event never arrived (e.g. error)
           if (!resolved) {
             resolved = true
+            if (resumeSessionId && code !== 0) {
+              console.warn('[mcp:analyze] resume failed (code=%d), clearing session', code)
+              claudeSessionsMap.delete(sessionKey(docPath, pageIndex))
+            }
             if (code === 0) {
               resolve({ success: true })
             } else {
-              resolve({ success: false, error: stderr.slice(0, 500) || `claude exited with code ${code}` })
+              const errMsg = stderr.slice(0, 500) || `claude exited with code ${code}`
+              resolve({ success: false, error: resumeSessionId ? `resume failed: ${errMsg}` : errMsg })
             }
           }
-          warmUp(docPath).catch(() => {})
+          warmUp().catch(() => {})
         })
 
         proc.on('error', (err) => {
           console.log('[mcp:analyze] spawn error:', err.message)
-          claudeProcess = null
+          if (claudeProcess === proc) claudeProcess = null
           if (!resolved) {
             resolved = true
             resolve({ success: false, error: err.message })
           }
         })
+      }).finally(() => {
+        if (claudeProcess === proc) {
+          console.warn('[mcp:analyze] safety net: clearing claudeProcess in finally')
+          claudeProcess = null
+        }
       })
     } catch (err: any) {
       claudeProcess = null
@@ -597,14 +853,25 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // Lightweight Claude call — no MCP tools, just prompt → text response
+  // Lightweight Claude call — no MCP tools, just prompt → text response (streaming)
   ipcMain.handle('mcp:ask', async (_event, prompt: string) => {
     try {
       const claudePath = await findClaudeBinary()
       if (!claudePath) {
         return { success: false, error: '找不到 claude 命令' }
       }
-      const proc = spawn(claudePath, ['-p', '--output-format', 'json'], {
+      const win = BrowserWindow.fromWebContents(_event.sender)
+      const proc = spawn(claudePath, [
+        '-p', '--verbose',
+        '--output-format', 'stream-json',
+        '--include-partial-messages',
+        '--tools', '',
+        '--max-turns', '1',
+        '--strict-mcp-config',
+        '--setting-sources', '',
+        '--disable-slash-commands',
+        '--plugin-dir', '/dev/null'
+      ], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: makeCleanEnv()
       })
@@ -612,7 +879,8 @@ export function registerIpcHandlers(): void {
       proc.stdin?.end()
 
       return new Promise<{ success: boolean; text?: string; error?: string }>((resolve) => {
-        let stdout = ''
+        let resultText = ''
+        let lineBuf = ''
         let stderr = ''
         let resolved = false
         const done = (result: { success: boolean; text?: string; error?: string }) => {
@@ -621,23 +889,44 @@ export function registerIpcHandlers(): void {
           clearTimeout(timeout)
           resolve(result)
         }
+        const sendProgress = (data: any) => {
+          if (win && !win.isDestroyed()) win.webContents.send('mcp:progress', JSON.stringify(data))
+        }
         // 60s timeout to prevent hanging
         const timeout = setTimeout(() => {
           proc.kill('SIGTERM')
           done({ success: false, error: '请求超时（60s）' })
         }, 60_000)
-        proc.stdout?.on('data', (d) => { stdout += d.toString() })
+        proc.stdout?.on('data', (d) => {
+          lineBuf += d.toString()
+          const lines = lineBuf.split('\n')
+          lineBuf = lines.pop() || ''
+          for (const line of lines) {
+            if (!line.trim()) continue
+            let evt: any = null
+            try { evt = JSON.parse(line) } catch { continue }
+
+            if (evt.type === 'stream_event') {
+              const inner = evt.event
+              if (inner?.type === 'content_block_delta' && inner.delta?.type === 'text_delta') {
+                sendProgress({ step: 'ask-delta', text: inner.delta.text })
+              }
+              continue
+            }
+            if (evt.type === 'result') {
+              resultText = typeof evt.result === 'string' ? evt.result : ''
+              done({ success: true, text: resultText })
+            }
+          }
+        })
         proc.stderr?.on('data', (d) => { stderr += d.toString() })
         proc.on('close', (code) => {
-          if (code !== 0) {
-            done({ success: false, error: stderr.slice(0, 500) || `exited ${code}` })
-            return
-          }
-          try {
-            const parsed = JSON.parse(stdout)
-            done({ success: true, text: parsed.result || stdout })
-          } catch {
-            done({ success: true, text: stdout })
+          if (!resolved) {
+            if (code === 0) {
+              done({ success: true, text: resultText })
+            } else {
+              done({ success: false, error: stderr.slice(0, 500) || `exited ${code}` })
+            }
           }
         })
         proc.on('error', (err) => {

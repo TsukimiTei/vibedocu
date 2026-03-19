@@ -76,6 +76,7 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
     () => explainCache.get(question.id) ?? null
   )
   const [explaining, setExplaining] = useState(false)
+  const [explainStreamText, setExplainStreamText] = useState('')
   const [visibleCount, setVisibleCount] = useState(0)
   const [showExplain, setShowExplain] = useState(false)
   const abortRef = useRef(false)
@@ -179,10 +180,25 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
         // Use OpenRouter (fast)
         result = await explainOptions(question.text, optionTexts, model, apiKey)
       } else if (aiMode === 'mcp') {
-        // Use Claude Code — reuse shared prompt
+        // Use Claude Code — reuse shared prompt (streaming)
         const prompt = `${EXPLAIN_OPTIONS_SYSTEM}\n\n${buildExplainOptionsPrompt(question.text, optionTexts)}`
 
-        const res = await window.api.mcp.ask(prompt)
+        setExplainStreamText('')
+        const unsub = window.api.mcp.onProgress((chunk: string) => {
+          try {
+            const evt = JSON.parse(chunk)
+            if (evt.step === 'ask-delta') {
+              setExplainStreamText((prev) => prev + (evt.text || ''))
+            }
+          } catch { /* ignore */ }
+        })
+        let res: { success: boolean; text?: string; error?: string }
+        try {
+          res = await window.api.mcp.ask(prompt)
+        } finally {
+          unsub()
+          setExplainStreamText('')
+        }
         if (!res.success || !res.text) throw new Error(res.error || '解释失败')
         // Strip markdown code fences before extracting JSON
         let text = res.text.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
@@ -229,9 +245,22 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
       if (apiKey) {
         text = await explainQuestion(question.text, question.category, model, apiKey)
       } else if (aiMode === 'mcp') {
-        const res = await window.api.mcp.ask(qPrompt)
-        if (!res.success || !res.text) throw new Error(res.error || '解释失败')
-        text = res.text
+        // Stream deltas into state as they arrive
+        const unsub = window.api.mcp.onProgress((chunk: string) => {
+          try {
+            const evt = JSON.parse(chunk)
+            if (evt.step === 'ask-delta') {
+              setQuestionExplain((prev) => (prev || '') + (evt.text || ''))
+            }
+          } catch { /* ignore */ }
+        })
+        try {
+          const res = await window.api.mcp.ask(qPrompt)
+          if (!res.success || !res.text) throw new Error(res.error || '解释失败')
+          text = res.text
+        } finally {
+          unsub()
+        }
       } else {
         return
       }
@@ -375,6 +404,13 @@ export function QuestionCard({ question, index, total, onInsert, onUpdateDocumen
         {showExplain && explainResult && visibleCount >= explainResult.explanations.length && (
           <div className="mt-3 px-3 py-2 rounded bg-bg-tertiary border border-border/50 animate-fadeIn">
             <p className="text-xs text-text-secondary leading-relaxed">{explainResult.summary}</p>
+          </div>
+        )}
+
+        {/* Streaming preview while explaining */}
+        {explaining && !explainResult && explainStreamText && (
+          <div className="mt-2 px-3 py-2 rounded bg-bg-tertiary border border-border/50 animate-fadeIn">
+            <p className="text-xs text-text-muted leading-relaxed whitespace-pre-wrap">{explainStreamText}</p>
           </div>
         )}
 
