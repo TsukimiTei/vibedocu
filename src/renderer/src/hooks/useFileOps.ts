@@ -81,6 +81,7 @@ export function useFileOps() {
     addRecentFile(path)
     useTerminalStore.getState().reset()
     useAgentStore.getState().reset()
+    useAgentStore.getState().loadFromFile(path)
     useContextStore.getState().reset()
     usePageStatusStore.getState().reset()
     useScreenshotStore.getState().reset()

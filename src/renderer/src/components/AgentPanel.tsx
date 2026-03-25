@@ -76,7 +76,7 @@ function ContextSection() {
 }
 
 export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }: AgentPanelProps) {
-  const { currentQuestions, sessions, isLoading, mcpSteps, mcpStartTime, mcpStats, mcpActivity, error } = useAgentStore()
+  const { currentQuestions, sessions, isLoading, mcpSteps, mcpStartTime, mcpStats, mcpActivity, mcpSummary, error } = useAgentStore()
 
   // Live elapsed timer for MCP mode
   const [elapsed, setElapsed] = useState(0)
@@ -207,9 +207,22 @@ export function AgentPanel({ onInsert, onOpenSettings, onUpdateDocumentAnswer }:
                     </div>
                   ))}
                 </div>
-                {mcpActivity && (
-                  <p className="text-[11px] text-text-muted/70 truncate mt-2 pl-8 italic">{mcpActivity}</p>
-                )}
+                {(() => {
+                  const visibleSummary = mcpSummary.includes('---JSON---')
+                    ? mcpSummary.slice(0, mcpSummary.indexOf('---JSON---')).trim()
+                    : mcpSummary.trim()
+                  if (visibleSummary) {
+                    return (
+                      <div className="mt-3 pl-8 pr-2">
+                        <p className="text-xs text-text-secondary leading-relaxed">{visibleSummary}</p>
+                      </div>
+                    )
+                  }
+                  if (mcpActivity) {
+                    return <p className="text-[11px] text-text-muted/70 truncate mt-2 pl-8 italic">{mcpActivity}</p>
+                  }
+                  return null
+                })()}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-text-muted">
